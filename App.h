@@ -125,13 +125,11 @@ public:
       DEBUG("\n");
       const byte sec = rtc.getSeconds();
       App::fOneMinute = false;
-      rtc.setAlarmSeconds((sec + (10 - sec % 10)) % 60);
-
-      digitalWrite(LED, HIGH);
+      rtc.setAlarmSeconds((sec + (9 - sec % 10)) % 60);
 
       unsigned d[11];
       for (int i = 10; i >= 0; --i) {
-        d[i] = mesureDistance();
+        d[i] = mesurerDistance();
       }
       insertionSortR(d, 11);
       const unsigned distance = d[5];
@@ -156,8 +154,6 @@ public:
         queue.push(sample3);
 //      }
             
-      digitalWrite(LED, LOW);
-  
 #define ALERT_LEVEL 500
       const bool alert = (last_distance < ALERT_LEVEL) &&  (distance >= ALERT_LEVEL);
       last_distance = distance;
@@ -175,9 +171,9 @@ public:
           json.concat(sample.value);
         }
         json.concat(F("\"}]"));
-        DEBUG(json); DEBUG("\n");
+//        DEBUG(json); DEBUG("\n");
   
-        const String path = String(F("/api/device/GSM-")) + imei + F("/samples");
+        const String path = String(F("/device/GSM-")) + imei + F("/samples");
         if (!put(path, json)) {
           Serial.println(F("Erreur de PUT"));
           return false;
@@ -202,7 +198,7 @@ protected:
     GPRS_APN(apn), 
     GPRS_LOGIN(login),
     GPRS_PASSWORD(password),
-    SERVER_HOST(F("ecot.picolimno.fr")),
+    SERVER_HOST(F("api.picolimno.fr")),
     SERVER_PORT(80) {
   }
 
@@ -230,7 +226,7 @@ protected:
   }
 
   bool sendStatus(const String& aState) {
-    const String path = String(F("/api/device/GSM-")) + imei + F("/status");
+    const String path = String(F("/device/GSM-")) + imei + F("/status");
 
     String payload(F("{\"timestamp\": \"")); 
     payload += getTimestamp();
@@ -256,13 +252,8 @@ protected:
   }
 
   bool put(const String& aPath, const String& aBody) {
-// Retry each PUT
-//    if (!connectGPRS()) return false;
-
-//    DEBUG(F("PUT ")); DEBUG(SERVER_HOST); DEBUG(':'); DEBUG(SERVER_PORT); DEBUG(aPath); DEBUG("\n");
-
     GSMClient client;
-    
+
     if (!client.connect(SERVER_HOST.c_str(), SERVER_PORT)) {
       Serial.println(F("Erreur de connexion"));
       return false;
@@ -274,15 +265,13 @@ protected:
     client.print(F("Content-Length: ")); client.println(aBody.length());
     client.println(F("Connection: close"));
     client.println();
-    client.print(aBody.c_str());
 
-    Serial.print(F("PUT "));   Serial.print(aPath);   Serial.println(F(" HTTP/1.0"));
-    Serial.print(F("Host: ")); Serial.println(SERVER_HOST);
-    Serial.println(F("Content-Type: application/json"));
-    Serial.print(F("Content-Length: ")); Serial.println(aBody.length());
-    Serial.println(F("Connection: close"));
-    Serial.println();
-    Serial.println(aBody.c_str());
+    String t = aBody;
+    while(t.length() > 0) {
+      const unsigned m = (t.length() >= 100 ? 100 : t.length());
+      client.print(t.substring(0, m));
+      t = t.substring(m);
+    }
 
     const unsigned long start = millis();
     while ((client.available() || client.connected()) && (millis() - start) < 30000) {
@@ -302,14 +291,17 @@ protected:
   }
 
   static 
-  unsigned long mesureDistance() {
-    pinMode(TRIGGER, INPUT);
-    delayMicroseconds(10); 
-    pinMode(TRIGGER, OUTPUT);
-    digitalWrite(TRIGGER, LOW);
+  unsigned long mesurerDistance() {
+    pinMode(1, OUTPUT);
+    pinMode(2, INPUT);
+    digitalWrite(1, HIGH);
+    delayMicroseconds(100); 
+    digitalWrite(1, LOW);
 
-    const unsigned long pulse = pulseIn(ECHO, HIGH, 25000UL);
-    return pulse * 17 / 100;
+    const unsigned long start = millis();
+    const unsigned long pulse = pulseIn(2, HIGH, 170000UL); // attendre env. 148 ms (mesure et calcul)
+    while (millis() - start < 170) ;  // attendre en tout 166ms avant la fin de toute la transmission
+    return pulse;
   }
 
   static
@@ -394,8 +386,8 @@ private:
   String imei;
 
   enum ports {
-    TRIGGER = 8,
-    ECHO = 7,
+    TRIGGER = 1,
+    ECHO = 2,
     LED = 6,
     AM2302 = 0
   };
@@ -420,6 +412,6 @@ App* App::pApp;
 RTCZero App::rtc;
 QueueArray<App::sample_t> App::queue;
 volatile bool App::fOneMinute;
-const int App::QUEUE_DEPTH = 50;
+const int App::QUEUE_DEPTH = 100;
 
 
