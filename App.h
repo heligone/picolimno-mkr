@@ -96,7 +96,8 @@ public:
           pinMode(ECHO, INPUT);
       
           const byte sec = rtc.getSeconds();
-          rtc.setAlarmSeconds((sec + (10 - sec % 10)) % 60);  // programmation de la prochaine alarme dans 10 sec.
+//          rtc.setAlarmSeconds((sec + (10 - sec % 10)) % 60);  // programmation de la prochaine alarme dans 10 sec.
+          rtc.setAlarmSeconds(0);  // programmation de la prochaine alarme au début de la minute
           rtc.enableAlarm(rtc.MATCH_SS);
           rtc.attachInterrupt(oneMinute);
           fOneMinute = false;
@@ -124,8 +125,9 @@ public:
       DEBUG(getTimestamp());
       DEBUG("\n");
       const byte sec = rtc.getSeconds();
+      const byte minu = rtc.getMinutes();
       App::fOneMinute = false;
-      rtc.setAlarmSeconds((sec + (9 - sec % 10)) % 60);
+//      rtc.setAlarmSeconds((sec + (9 - sec % 10)) % 60);
 
       unsigned d[11];
       for (int i = 10; i >= 0; --i) {
@@ -133,10 +135,10 @@ public:
       }
       insertionSortR(d, 11);
       const unsigned distance = d[5];
-      const sample_t sample = { rtc.getEpoch(), F("range"), float(distance) };
+      const sample_t sample = { rtc.getEpoch(), F("range"), distance / 10.0 };
       queue.push(sample);
   
-//      if (!sec) {   // toutes mes min. seulement
+      if (!(minu % 15)) { // tous les 1/4 d'heure
         float temp, hygro = 0;
         if (readAM2302(temp, hygro)) {
           const sample_t sample1 = { rtc.getEpoch(), F("temp"), temp };
@@ -145,14 +147,14 @@ public:
           const sample_t sample2 = { rtc.getEpoch(), F("hygro"), hygro };
           queue.push(sample2);
         }
-//      }
+      }
       
-//      if (!sec) {   // toutes les min. seulement
+      if (!(minu % 15)) {   // tous les 1/4 d'heure
         const unsigned a = analogRead(ADC_BATTERY);
         const float vbat = a * (3.3 * 153) / (1024 * 120.0);
         const sample_t sample3 = { rtc.getEpoch(), F("vbat"), vbat };
         queue.push(sample3);
-//      }
+      }
             
 #define ALERT_LEVEL 500
       const bool alert = (last_distance < ALERT_LEVEL) &&  (distance >= ALERT_LEVEL);
@@ -412,6 +414,6 @@ App* App::pApp;
 RTCZero App::rtc;
 QueueArray<App::sample_t> App::queue;
 volatile bool App::fOneMinute;
-const int App::QUEUE_DEPTH = 100;
+const int App::QUEUE_DEPTH = 10;
 
 
