@@ -137,6 +137,7 @@ public:
       const unsigned distance = d[5];
       const sample_t sample = { rtc.getEpoch(), F("range"), distance / 10.0 };
       queue.push(sample);
+      DEBUG(distance / 10.0); DEBUG('\n');
   
       if (!(minu % 15)) { // tous les 1/4 d'heure
         float temp, hygro = 0;
@@ -150,8 +151,11 @@ public:
       }
       
       if (!(minu % 15)) {   // tous les 1/4 d'heure
-        const unsigned a = analogRead(ADC_BATTERY);
-        const float vbat = a * (3.3 * 153) / (1024 * 120.0);
+        unsigned long a = 0;
+        for (int i = 0; i < 10; ++i) {
+          a += analogRead(ADC_BATTERY);
+        }
+        const float vbat = a * (3.3 * 153) / (1024 * 120.0) / 10.0;
         const sample_t sample3 = { rtc.getEpoch(), F("vbat"), vbat };
         queue.push(sample3);
       }
