@@ -94,6 +94,7 @@ public:
       
           pinMode(LED, OUTPUT);
           pinMode(ECHO, INPUT);
+          pinMode(TRIGGER, OUTPUT);
       
           const byte sec = rtc.getSeconds();
 //          rtc.setAlarmSeconds((sec + (10 - sec % 10)) % 60);  // programmation de la prochaine alarme dans 10 sec.
@@ -298,14 +299,14 @@ protected:
 
   static 
   unsigned long mesurerDistance() {
-    pinMode(1, OUTPUT);
-    pinMode(2, INPUT);
-    digitalWrite(1, HIGH);
+//    pinMode(TRIGGER, OUTPUT);
+//    pinMode(ECHO, INPUT);
+    digitalWrite(TRIGGER, HIGH);
     delayMicroseconds(100); 
-    digitalWrite(1, LOW);
+    digitalWrite(TRIGGER, LOW);
 
     const unsigned long start = millis();
-    const unsigned long pulse = pulseIn(2, HIGH, 170000UL); // attendre env. 148 ms (mesure et calcul)
+    const unsigned long pulse = pulseIn(ECHO, HIGH, 170000UL); // attendre env. 148 ms (mesure et calcul)
     while (millis() - start < 170) ;  // attendre en tout 166ms avant la fin de toute la transmission
     return pulse;
   }
@@ -392,8 +393,8 @@ private:
   String imei;
 
   enum ports {
-    TRIGGER = 1,
-    ECHO = 2,
+    TRIGGER = 2,
+    ECHO = 3,
     LED = 6,
     AM2302 = 0
   };
