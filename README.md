@@ -47,13 +47,13 @@ de support.
   * Noir (GND) -> GND (MKR)
 
 * Capteur de distance Maxbotix MB7x6x :
-  1 (carré) (Non-Connecté)
-  2 Echo -> 3 (MKR)
-  3 Analog (NC)
-  4 Trigger -> 2 (MKR)
-  5 TX Serial (NC)
-  6 VCC -> VCC (MKR)
-  7 GND -> GND (MKR)
+  * [1] [carré] (Non-Connecté)
+  * (2) Echo -> 3 (MKR)
+  * (3) Analog (NC)
+  * (4) Trigger -> 2 (MKR)
+  * (5) TX Serial (NC)
+  * (6) VCC -> VCC (MKR)
+  * (7) GND -> GND (MKR)
 
 Le port USB peut être utilisé sans danger en même temps que le panneau solaire, 
 sans risque de retour vers le PC, car l'alimentation assure cette protection.
