@@ -1,11 +1,12 @@
 /**
-    Water-Level-MKRGSM1400 V1.0 project
-    App.h
-    Purpose: Contain the main application's Class.
-
-    @author M. SIBERT
-    @version 1.0 25/02/2018
-*/
+ *  Water-Level-MKRGSM1400 V1.0 project
+ *  App.h
+ *  Purpose: Contain the main application's Class.
+ *
+ *  @author Marc Sibert
+ *  @version 1.0 25/02 - 11/04/2018
+ *  @Copyright 2018 Marc Sibert
+ */
 #pragma once
 
 #include <MKRGSM.h>
@@ -14,6 +15,9 @@
 #include <assert.h>
 #include <QueueArray.h>
 
+/**
+ * Classe principale qui implémente l'application.
+ */
 class App {
 public:
 /**
@@ -30,6 +34,8 @@ public:
   
 /**
  * Lazy setup of all devices & others parameters, especialy connections to GSM & GPRS services.
+ * C'est une machine à états (https://fr.wikipedia.org/wiki/%C3%89tat_(patron_de_conception).
+ * @todo A implémenter dans les règles de l'art, pas avec juste une boucle et un switch.
  * 
  * @return boolean value to indicate if execution was right or not. A faulty exec. means the program can't continue and should be aborted.
  */
@@ -94,6 +100,7 @@ public:
       
           pinMode(LED, OUTPUT);
           pinMode(ECHO, INPUT);
+          digitalWrite(TRIGGER, LOW);
           pinMode(TRIGGER, OUTPUT);
       
           const byte sec = rtc.getSeconds();
@@ -117,15 +124,22 @@ public:
  * @return boolean value to indicate if execution was right or not. A faulty exec. means the program can't continue and should be aborted.
  */
   bool loop() {
+/*    
+    DEBUG(mesurerDistance());
+    DEBUG('\n');
+    return true;
+*/    
+
     static unsigned last_distance;
     
 //    rtc.standbyMode();
     
+// Si on a détecté un changement de minute, on lance les mesures nécessaires
     if (App::fOneMinute) {
       DEBUG(F("Wakeup @ "));
       DEBUG(getTimestamp());
       DEBUG("\n");
-      const byte sec = rtc.getSeconds();
+//      const byte sec = rtc.getSeconds();
       const byte minu = rtc.getMinutes();
       App::fOneMinute = false;
 //      rtc.setAlarmSeconds((sec + (9 - sec % 10)) % 60);
@@ -136,7 +150,7 @@ public:
       }
       insertionSortR(d, 11);
       const unsigned distance = d[5];
-      const sample_t sample = { rtc.getEpoch(), F("range"), distance / 10.0 };
+      const sample_t sample = { rtc.getEpoch(), F("range"), distance / 10.0f };
       queue.push(sample);
       DEBUG(distance / 10.0); DEBUG('\n');
   
@@ -156,7 +170,7 @@ public:
         for (int i = 0; i < 10; ++i) {
           a += analogRead(ADC_BATTERY);
         }
-        const float vbat = a * (3.3 * 153) / (1024 * 120.0) / 10.0;
+        const float vbat = a * (3.3f * 153) / (1024 * 120.0f) / 10.0f;
         const sample_t sample3 = { rtc.getEpoch(), F("vbat"), vbat };
         queue.push(sample3);
       }
@@ -165,6 +179,7 @@ public:
       const bool alert = (last_distance < ALERT_LEVEL) &&  (distance >= ALERT_LEVEL);
       last_distance = distance;
 
+// Transmission des données si quantité suffisante ou alerte.
       if ((queue.count() >= App::QUEUE_DEPTH) || alert) {  
         String json;
         while (!queue.isEmpty()) {
@@ -218,6 +233,12 @@ protected:
     fOneMinute = true;
   }
 
+/** 
+ * Assure la connection au réseau GPRS et retourne le succès de l'opération.
+ * Il y a un timeout de 5s pour essayer d'assurer la connection.
+ *
+ * @return L'état de la connection à l'issue de la tentative.
+ */
   bool connectGPRS() {
     int err;
     for (byte i = 0; i < 10; ++i) {
@@ -232,6 +253,15 @@ protected:
     return (err == GPRS_READY);
   }
 
+/**
+ * Transmet l'état du device sous la forme d'un flux Json qui contient le statut ainsi que d'autres éléments :
+ * - L'heure mémorisée au moment de la transmission ;
+ * - L'état tel que passé en paramètre ;
+ * - L'IP du périphérique ;
+ * 
+ * @param aState L'état transmis dans le flux Json.
+ * @return Le succès de la transmission, ou pas.
+ */
   bool sendStatus(const String& aState) {
     const String path = String(F("/device/GSM-")) + imei + F("/status");
 
@@ -258,6 +288,13 @@ protected:
     return true;    
   }
 
+/**
+ * Émet une requête HTTP PUT vers le serveur de référence.
+ * 
+ * @param aPath Chemin transmis dans la requête.
+ * @param aBody Contenu de la requête.
+ * @return Le succès de la transmission.
+ */
   bool put(const String& aPath, const String& aBody) {
     GSMClient client;
 
@@ -291,16 +328,25 @@ protected:
     return true;
   }
   
+/**
+ * Retourne la date et l'heure maintenues par la RTC locale.
+ * 
+ * @return L'heure actuelle au format ISO3339 (https://www.ietf.org/rfc/rfc3339.txt).
+ */
   String getTimestamp() {
     char buffer[25];
     snprintf(buffer, sizeof(buffer), "20%02d-%02d-%02dT%02d:%02d:%02dZ", rtc.getYear(), rtc.getMonth(), rtc.getDay(), rtc.getHours(), rtc.getMinutes(), rtc.getSeconds() );
     return String(buffer);
   }
 
-  static 
-  unsigned long mesurerDistance() {
-//    pinMode(TRIGGER, OUTPUT);
-//    pinMode(ECHO, INPUT);
+/**
+ * Retourne la distance mesurée par le capteur Maxbotix MBxxxx.
+ * "To calculate the distance, use a scale factor of 58uS per cm." 
+ * ou pas !!! je comprends pas, mais la mesure est correcte.
+ * 
+ * @return La distance mesurée exprimée en mm.
+ */
+  unsigned long mesurerDistance() const {
     digitalWrite(TRIGGER, HIGH);
     delayMicroseconds(100); 
     digitalWrite(TRIGGER, LOW);
@@ -311,8 +357,7 @@ protected:
     return pulse;
   }
 
-  static
-  void insertionSortR(unsigned A[], const int n) {
+  void insertionSortR(unsigned A[], const int n) const {
      if (n > 0) {
         insertionSortR(A, n-1);
         const unsigned x = A[n];
@@ -328,9 +373,9 @@ protected:
   bool readAM2302(float& aTemp, float& aHygro) {
     pinMode(AM2302, INPUT);
     digitalWrite(AM2302, HIGH);  // pullup
-    unsigned long ms = millis();
-    while (millis() - ms < 1000) ;
-//    delay(1000);
+//    unsigned long ms = millis();
+//    while (millis() - ms < 1000) ;
+    delay(1000);
 
     pinMode(AM2302, OUTPUT);
     digitalWrite(AM2302, LOW);   // down
@@ -383,8 +428,6 @@ private:
   const unsigned SERVER_PORT;
 
   GSMModem modem;
-//  GSMSSLClient client;
-//  GSMClient client;
   GPRS gprs;
   GSM gsmAccess;
 

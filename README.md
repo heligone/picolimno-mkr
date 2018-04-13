@@ -2,7 +2,7 @@
 
 Télémètre à ultra-sons basé sur le carte Arduino MKRGSM-1400.
 
-![Image of breadboard](proto.jpg)
+![Image of breadboard](doc/proto.jpg)
 
 ## Compilation
 Après avoir cloner le répertoire, penser à ajouter le fichier
@@ -58,6 +58,6 @@ de support.
 Le port USB peut être utilisé sans danger en même temps que le panneau solaire, 
 sans risque de retour vers le PC, car l'alimentation assure cette protection.
 
-![Vue de dessus](20180411_143135.jpg)
-![Vue de dessous](20180411_143151.jpg)
-![Vue du Capteur](20180411_143222.jpg)
+![Vue de dessus](doc/20180411_143135.jpg)
+![Vue de dessous](doc/20180411_143151.jpg)
+![Vue du Capteur](doc/20180411_143222.jpg)
