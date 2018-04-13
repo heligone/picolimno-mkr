@@ -58,3 +58,6 @@ de support.
 Le port USB peut être utilisé sans danger en même temps que le panneau solaire, 
 sans risque de retour vers le PC, car l'alimentation assure cette protection.
 
+![Vue de dessus](20180411_143135.jpg)
+![Vue de dessous](20180411_143151.jpg)
+![Vue du Capteur](20180411_143222.jpg)
