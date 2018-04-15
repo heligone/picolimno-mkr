@@ -46,6 +46,7 @@ App& app = App::getInstance(F(APN_NAME), F(APN_USERNAME), F(APN_PASSWORD));
 void setup() {
   Serial.begin(115200);
 //  while (!Serial) ;
+  delay(2000);
 
   Serial.println(F(__FILE__));
   Serial.print(F("Compiled on ")); Serial.print(F(__DATE__)); 
