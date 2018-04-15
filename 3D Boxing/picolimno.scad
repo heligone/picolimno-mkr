@@ -106,18 +106,22 @@ module Boite(arrondi = 5, epaisseur = 2) {
 module Bouchon() {
     difference() {
         union() {
-            hull() for (x=[-1,1]) for (y=[-1,1]) translate([11*x,y,0]) cylinder(r=2.5,h=2,$fn=36);
+            hull() for(x=[-1,1]) for(y=[-1,1]) translate([11*x,y,-5]) cylinder(r=2.5,h=2,$fn=36);
             union() {
-                translate([0,2.5,0]) rotate([90,0,0]) cylinder(r=8.5,h=5,center=true,$fn=104);
-                sphere(r=8.5,$fn=52);
+                hull() for(z=[0,-5]) {
+                    translate([0,2.5,z]) rotate([90,0,0]) cylinder(r=8.5,h=5,center=true,$fn=104);
+                }
+                hull() for(z=[0,-5]) {
+                    translate([0,0,z]) sphere(r=8.5,$fn=52);
+                }
             }
         }
-        hull() {
-            translate([0,9,0]) rotate([90,0,0]) cylinder(r=7.5,h=1,center=true,$fn=36);
-            sphere(r=7.5,$fn=36);
+        hull() for(z=[0,-5]) {
+            translate([0,9,z]) rotate([90,0,0]) cylinder(r=7.5,h=1,center=true,$fn=36);
+            translate([0,0,z]) sphere(r=7.5,$fn=36);
         }
-        translate([0,-1.75,-5]) cube([28,14.5, 10],center=true);
-        for (x=[-1,1]) translate([x*11,0,1]) cylinder(r=1,h=3,$fn=16,center=true);
+        translate([0,-1.75,-10]) cube([28,14.5, 10],center=true);
+        for (x=[-1,1]) translate([x*11,0,-5 + 1]) cylinder(r=1,h=3,$fn=16,center=true);
     }
 }
 
@@ -148,6 +152,6 @@ module PetitCote() {
 };
 
 
-PetitCote();
-GrandCote();
+// PetitCote();
+// GrandCote();
 Bouchon();
