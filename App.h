@@ -186,9 +186,6 @@ public:
           const sample_t sample2 = { rtc.getEpoch(), F("hygro"), hygro };
           queue.push(sample2);
         }
-      }
-      
-      if (!(nbEchant % 15)) {   // tous les 15 échantillons
         const sample_t sample3 = { rtc.getEpoch(), F("vbat"), sensors.sampleBattery() };
         queue.push(sample3);
       }

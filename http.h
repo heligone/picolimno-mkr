@@ -16,7 +16,7 @@
  *  @file
  *  Picolimno MKR V1.0 project
  *  http.h
- *  HTTP client verbs.
+ *  HTTP/HTTPS client verbs.
  *
  *  @author Marc Sibert
  *  @version 1.0 15/04/2018
@@ -25,25 +25,50 @@
 
 #pragma once
 
+/**
+ * Cette classe implémente les méthodes nécessaires pour assurer la communication HTTPS via GPRS
+ */
 class Http {
 private:
   const String host;
-  const byte port;
+  const unsigned port;
   
 
 protected:
 
 
 public:
-  Http(const __FlashStringHelper aServer[], const byte aPort) :
+/**
+ * Constructeur ne précisant que le nom du serveur (Host).
+ * 
+ * @param aServer[] Une chaîne de caractères contenant le nom du serveur.
+ */
+  Http(const __FlashStringHelper aServer[]) :
+    Http(aServer, 443)
+  {}
+
+/**
+ * Constructeur précisant le nom du serveur (Host) et le port TCP à utiliser.
+ * 
+ * @param aServer[] Une chaîne de caractères contenant le nom du serveur.
+ * @param aPort Un entier indiquant le numéro du port TCP à utiliser.
+ */
+  Http(const __FlashStringHelper aServer[], const unsigned aPort) :
     host(aServer),
     port(aPort)
   {}
 
+/**
+ * Produit et transmet une requete HTTPS / GET avec le chemin préciser. La réponse est retournée en cas de succès seulement.
+ * 
+ * @param aPath Chemin inclus dans la requête.
+ * @param aResponse Référence vers une chaîne de caractère pouvant recevoir la réponse (Body).
+ * @return Un boolean indiquant le succès de la requête (HTTP ERR <= 300).
+ */
   bool get(const String& aPath, String& aResponse) const {
     GSMSSLClient client;
 
-    if (!client.connect(host.c_str(), 443)) {
+    if (!client.connect(host.c_str(), port)) {
       Serial.println(F("Erreur de connexion"));
       return false;
     }
@@ -51,7 +76,6 @@ public:
     client.print(F("GET "));   client.print(aPath);   client.println(F(" HTTP/1.0"));
     client.print(F("Host: ")); client.println(host);
     client.println(F("Content-Type: application/json"));
-//    client.print(F("Content-Length: ")); client.println(aBody.length());
     client.println(F("Connection: close"));
     client.println();
 
@@ -73,22 +97,22 @@ public:
       const int b = s.substring(9).indexOf(' ');  // prochain espace après "err"
       const String mess = s.substring(b+1, a);
       if ((b >= 0) && (err < 300)) {
-        s = s.substring(a+1); // first header
+        s = s.substring(a + 2); // first header
         bool json = false;
         bool update = false;
         int c;
     // Parcours de chaque header
         while ((c = s.indexOf('\r')) > 0) {
-Serial.println(s.substring(0, c-1));
+//Serial.println(">" + s.substring(0, c) + "<");
           const int d = s.indexOf(':');
           if (s.substring(0, d).equalsIgnoreCase(F("Content-Type")) and s.substring(d + 2, c).equalsIgnoreCase(F("application/json;charset=utf-8"))) {
             json = true;
           } else if (s.substring(0, d).equalsIgnoreCase(F("X-Parameters")) and s.substring(d + 2, c).equalsIgnoreCase(F("updated"))) {
             update = true;
           }
-          s = s.substring(c + 1); // Next header
+          s = s.substring(c + 2); // Next header
         }
-        s = s.substring(c + 1); // Ligne vide avant body.
+        s = s.substring(c + 2); // Ligne vide avant body.
 
         aResponse = s;
         return true;
