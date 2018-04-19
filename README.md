@@ -27,6 +27,14 @@ Après avoir cloner le répertoire, penser à ajouter le fichier
 #define APN_PASSWORD ""
 ```
 
+### Dépendances
+* QueueArray : 
+  <code>Croquis > Inclure une biliothèque >  Ajouter la bibliothèque .ZIP...</code> Importer préalablement le fichier disponible sur https://playground.arduino.cc/Code/QueueArray  ;
+* MKRGSM :
+  <code>Croquis > Inclure une biliothèque > MKRGSM</code> ;
+* RTCZero :
+  <code>Croquis > Inclure une biliothèque > RTCZero</code>
+
 ## Matériel
 Le montage est simple, il consiste simplement à connecter les 3 périphériques
 sur la carte. On peut le faire soit en "volant" en utilisant le bornier 
