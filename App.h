@@ -248,7 +248,7 @@ protected:
   App(const __FlashStringHelper apn[], const __FlashStringHelper login[], const __FlashStringHelper password[]) :
     sensors(TRIGGER, ECHO, AM2302),
     parameters(),
-    http(F("api.picolimno.fr"), 80),
+    http(F("api.picolimno.fr"), 443),
     GPRS_APN(apn), 
     GPRS_LOGIN(login),
     GPRS_PASSWORD(password)

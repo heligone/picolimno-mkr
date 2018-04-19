@@ -29,8 +29,10 @@ class Parameters {
 
 private:
   struct Data {
-    float alert1;
-    float alert2;
+    float limit1;
+    float hyst1;
+    float limit2;
+    float hyst2;
     byte startTime;
     byte stopTime;
   };
@@ -54,6 +56,8 @@ public:
 };
 
 const Parameters::Data Parameters::hardCoded = {
+  0.0,
+  0.0,
   0.0,
   0.0,
   0,

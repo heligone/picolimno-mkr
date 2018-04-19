@@ -41,9 +41,9 @@ public:
   {}
 
   bool get(const String& aPath, String& aResponse) const {
-    GSMClient client;
+    GSMSSLClient client;
 
-    if (!client.connect(host.c_str(), port)) {
+    if (!client.connect(host.c_str(), 443)) {
       Serial.println(F("Erreur de connexion"));
       return false;
     }
@@ -67,7 +67,7 @@ public:
 //    Serial.println(s);
 
     // Analyse : "HTTP/1.x err texte\n"
-    const int a = s.indexOf('\n');  // Prochain CR
+    const int a = s.indexOf('\r');  // Prochain CR
     if ((a >= 0) and (s.substring(0, 7).equalsIgnoreCase(F("HTTP/1.")))) {
       const unsigned err = s.substring(9).toInt();
       const int b = s.substring(9).indexOf(' ');  // prochain espace après "err"
@@ -77,8 +77,9 @@ public:
         bool json = false;
         bool update = false;
         int c;
-        while ((c = s.indexOf('\n')) > 0) {
-//          Serial.println(s.substring(0, c));
+    // Parcours de chaque header
+        while ((c = s.indexOf('\r')) > 0) {
+Serial.println(s.substring(0, c-1));
           const int d = s.indexOf(':');
           if (s.substring(0, d).equalsIgnoreCase(F("Content-Type")) and s.substring(d + 2, c).equalsIgnoreCase(F("application/json;charset=utf-8"))) {
             json = true;
@@ -93,9 +94,9 @@ public:
         return true;
         
       } else {
-        Serial.print(F("Error "));
-        Serial.print(err);
-        Serial.println(mess);
+Serial.print(F("Error "));
+Serial.print(err);
+Serial.println(mess);
       }
     } else {
       Serial.println(F("Pas de CR\n"));
@@ -113,9 +114,9 @@ public:
  * @return Le succès de la transmission.
  */
   bool put(const String& aPath, const String& aBody) const {
-    GSMClient client;
+    GSMSSLClient client;
 
-    if (!client.connect(host.c_str(), port)) {
+    if (!client.connect(host.c_str(), 443)) {
       Serial.println(F("Erreur de connexion"));
       return false;
     }
