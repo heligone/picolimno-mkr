@@ -175,19 +175,23 @@ public:
       const unsigned distance = d[5];
       const sample_t sample = { rtc.getEpoch(), F("range"), distance / 10.0f };
       queue.push(sample);
-      DEBUG(distance / 10.0); DEBUG('\n');
+      DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG('\n');
   
       if (!(nbEchant % 15)) { // tous les 15 échantillons
         float temp, hygro = 0;
         if (sensors.sampleAM2302(temp, hygro)) {
           const sample_t sample1 = { rtc.getEpoch(), F("temp"), temp };
           queue.push(sample1);
+          DEBUG(F("Temperature : ")); DEBUG(temp); DEBUG('\n');
           
           const sample_t sample2 = { rtc.getEpoch(), F("hygro"), hygro };
           queue.push(sample2);
+          DEBUG(F("Hygrometrie : ")); DEBUG(hygro); DEBUG('\n');
         }
-        const sample_t sample3 = { rtc.getEpoch(), F("vbat"), sensors.sampleBattery() };
+        const float vBat = sensors.sampleBattery();
+        const sample_t sample3 = { rtc.getEpoch(), F("vbat"), vBat };
         queue.push(sample3);
+        DEBUG("Batterie : "); DEBUG(vBat); DEBUG('\n');
       }
             
 #define ALERT_LEVEL 500
