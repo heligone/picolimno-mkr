@@ -38,8 +38,8 @@
  * Fréquence d'échantillonnage, 1 fois par minute (60 sec) pour la prod, 
  * mais plus souvent sinon les tests sont trop long.
  */
-#define ECHANT 60
-//#define ECHANT 10
+//#define ECHANT 60
+#define ECHANT 10
 
 /**
  * Classe principale qui implémente l'application.

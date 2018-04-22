@@ -44,7 +44,7 @@ public:
  * @param aServer[] Une chaîne de caractères contenant le nom du serveur.
  */
   Http(const __FlashStringHelper aServer[]) :
-    Http(aServer, 443)
+    Http(aServer, 80)
   {}
 
 /**
@@ -66,9 +66,9 @@ public:
  * @return Un boolean indiquant le succès de la requête (HTTP ERR <= 300).
  */
   bool get(const String& aPath, String& aResponse) const {
-    GSMSSLClient client;
+    GSMClient client;
 
-    if (!client.connect(host.c_str(), port)) {
+    if (!client.connect(host.c_str(), 80)) {
       Serial.println(F("Erreur de connexion"));
       return false;
     }
@@ -138,9 +138,12 @@ Serial.println(mess);
  * @return Le succès de la transmission.
  */
   bool put(const String& aPath, const String& aBody) const {
-    GSMSSLClient client;
+    DEBUG("PUT "); DEBUG(aPath); DEBUG('\n');
+    
+//    GSMSSLClient client;
+    GSMClient client;
 
-    if (!client.connect(host.c_str(), 443)) {
+    if (!client.connect(host.c_str(), 80)) {
       Serial.println(F("Erreur de connexion"));
       return false;
     }
