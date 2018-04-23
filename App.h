@@ -99,6 +99,12 @@ public:
           } while (imei.length() == 0);
           DEBUG(F("DeviceID: GSM-")); DEBUG(imei); DEBUG('\n');
           
+/**
+ * @todo
+ * @see https://github.com/heligone/picolimno-mkr/issues/11
+ * Répéter la requête plusieurs fois si la date est incohérente ( < __DATE__[7] * 1000 + __DATE__[8] * 100 + __DATE__[9] * 10 + __DATE__[10] ).
+ * En cas d'echec persistant, faire une requête NTP quand on arrive en GPRS :-)
+ **/
           rtc.begin();
           const time_t t = gsmAccess.getTime();
           struct tm *const stm = gmtime(&t);
