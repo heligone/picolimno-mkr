@@ -99,18 +99,24 @@ public:
           } while (imei.length() == 0);
           DEBUG(F("DeviceID: GSM-")); DEBUG(imei); DEBUG('\n');
           
-/**
- * @todo
- * @see https://github.com/heligone/picolimno-mkr/issues/11
- * Répéter la requête plusieurs fois si la date est incohérente ( < __DATE__[7] * 1000 + __DATE__[8] * 100 + __DATE__[9] * 10 + __DATE__[10] ).
- * En cas d'echec persistant, faire une requête NTP quand on arrive en GPRS :-)
- **/
           rtc.begin();
-          const time_t t = gsmAccess.getTime();
-          struct tm *const stm = gmtime(&t);
-          rtc.setTime(stm->tm_hour, stm->tm_min, stm->tm_sec);
-          rtc.setDate(stm->tm_mday, stm->tm_mon + 1, stm->tm_year % 100);
-          DEBUG(F("Setting time at ")); DEBUG(getTimestamp()); DEBUG('\n');
+          DEBUG(F("Setting time... "));
+          bool dateCoherante = false;
+          for(int i = 0; i < 10; ++i) {
+            DEBUG(i+1); DEBUG(',');
+            const time_t t = gsmAccess.getTime();
+            struct tm *const stm = gmtime(&t);
+            if ((1900 + stm->tm_year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante
+              rtc.setTime(stm->tm_hour, stm->tm_min, stm->tm_sec);
+              rtc.setDate(stm->tm_mday, stm->tm_mon + 1, stm->tm_year % 100);
+              dateCoherante = true;
+              break;  // succès
+            }
+            delay(500);
+          }
+          if (!dateCoherante) 
+            DEBUG(F("Warning inconsistent date!\n"));
+          DEBUG(F("- at ")); DEBUG(getTimestamp()); DEBUG('\n');
           
           DEBUG(F("Setting up GPRS connection..."));
           if (connectGPRS()) {
@@ -337,6 +343,13 @@ protected:
     return String(buffer);
   }
 
+/**
+ * Trie directement le tableau d'entiers non-signés afin d'obtenir la médiane en position centrale du tableau.
+ * @warning Le tableau ne sera pas entièrement trié !
+ * 
+ * @A Un tableau d'entiers non-signer qui verra sa médiane placée en son centre.
+ * @n Position du pivot, par défaut y mettre l'indice du milieu du tableau.
+ */
   void insertionSortR(unsigned A[], const int n) const {
      if (n > 0) {
         insertionSortR(A, n-1);
