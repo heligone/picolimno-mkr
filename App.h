@@ -93,7 +93,7 @@ public:
           }
           break;
         }
-        case STATE_GSM_READY : {  // gsm actif et récupération de l'emei et de l'heure puis connexion GPRS...
+        case STATE_GSM_READY : {  // gsm actif et récupération de l'emei et de l'heure puis connexion GSM...
           do {
             imei = modem.getIMEI();
           } while (imei.length() == 0);
@@ -135,6 +135,17 @@ public:
           DEBUG(F("Requesting parameters")); DEBUG('\n');
           const String s = getParameters();
           
+          if (!dateCoherante) { // Recherche de la date NTP
+            const uint32_t epoch = getNTP();
+            struct tm *const stm = gmtime((long*)&epoch);
+            if ((1900 + stm->tm_year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante
+              rtc.setTime(stm->tm_hour, stm->tm_min, stm->tm_sec);
+              rtc.setDate(stm->tm_mday, stm->tm_mon + 1, stm->tm_year % 100);
+            } else {
+              DEBUG(F("Warning no NTP date!\n"));
+            }
+          }
+                    
           state = STATE_READY;
           break;
         }
@@ -267,6 +278,74 @@ protected:
     GPRS_PASSWORD(password)
   {
   }
+
+/**
+ * Retourne l'heure à partir d'une requête NTP.
+ *
+ * @param aURL l'url du service ntp utilisé.
+ * @return Le temps epoch écoulé.
+ */
+
+  uint32_t getNTP() const {
+    struct __attribute__ ((packed)) NtpPacket { 
+      uint8_t li_vn_mode;      // Eight bits. li, vn, and mode.
+                               // li.   Two bits.   Leap indicator.
+                               // vn.   Three bits. Version number of the protocol.
+                               // mode. Three bits. Client will pick mode 3 for client.
+    
+      uint8_t stratum;         // Eight bits. Stratum level of the local clock.
+      uint8_t poll;            // Eight bits. Maximum interval between successive messages.
+      uint8_t precision;       // Eight bits. Precision of the local clock.
+    
+      uint32_t rootDelay;      // 32 bits. Total round trip delay time.
+      uint32_t rootDispersion; // 32 bits. Max error aloud from primary clock source.
+      uint32_t refId;          // 32 bits. Reference clock identifier.
+    
+      uint32_t refTm_s;        // 32 bits. Reference time-stamp seconds.
+      uint32_t refTm_f;        // 32 bits. Reference time-stamp fraction of a second.
+    
+      uint32_t origTm_s;       // 32 bits. Originate time-stamp seconds.
+      uint32_t origTm_f;       // 32 bits. Originate time-stamp fraction of a second.
+    
+      uint32_t rxTm_s;         // 32 bits. Received time-stamp seconds.
+      uint32_t rxTm_f;         // 32 bits. Received time-stamp fraction of a second.
+    
+      uint8_t txTm_s[4];
+//      uint32_t txTm_s;         // 32 bits and the most important field the client cares about. Transmit time-stamp seconds.
+      uint32_t txTm_f;         // 32 bits. Transmit time-stamp fraction of a second.
+    };
+    NtpPacket packetBuffer;
+    
+    assert(sizeof(packetBuffer) == 48);
+    memset(&packetBuffer, 0, sizeof(packetBuffer));
+    packetBuffer.li_vn_mode = 0b11100011;
+    packetBuffer.stratum = 0;
+    packetBuffer.poll = 6;
+    packetBuffer.precision = 0xEC;
+
+    GSMUDP Udp;
+
+    Udp.begin(2390); // listening 
+
+    const IPAddress timeServer(163,172,12,49);
+    Udp.beginPacket(timeServer, 123);
+    Udp.write((const char*)&packetBuffer, sizeof(packetBuffer));
+    Udp.endPacket();
+
+    unsigned long start = millis();
+    do {
+      if ( Udp.parsePacket() ) {
+        Udp.read((char*)&packetBuffer, sizeof(packetBuffer));
+        return ((packetBuffer.txTm_s[0] * 0x100UL + packetBuffer.txTm_s[1]) * 0x100UL + packetBuffer.txTm_s[2]) * 0x100UL + packetBuffer.txTm_s[3] - 2208988800UL;
+      } else {
+        DEBUG('.');
+        delay(500);
+      }
+    } while (millis() - start < 30000UL);
+
+    return 0;    
+  };
+
 
 /**
  * Called every ECHANT second by interruption.
