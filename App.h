@@ -67,6 +67,7 @@ public:
  */
   bool setup() {
     enum { STATE_IDLE, STATE_GSM_READY, STATE_GSM_ERROR, STATE_GPRS_READY, STATE_GPRS_ERROR, STATE_READY } state = STATE_IDLE;
+    bool dateCoherante = false;
 
     while (true) {    // lancement de la machine a états
       switch (state) {
@@ -101,7 +102,6 @@ public:
           
           rtc.begin();
           DEBUG(F("Setting time... "));
-          bool dateCoherante = false;
           for(int i = 0; i < 10; ++i) {
             DEBUG(i+1); DEBUG(',');
             const time_t t = gsmAccess.getTime();
