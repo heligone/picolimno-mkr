@@ -132,6 +132,11 @@ public:
           DEBUG(F("Sending Status Starting")); DEBUG('\n');
           sendStatus(F("Starting"));
 
+          GSM_SMS sms;
+          sms.beginSMS("+33 632205550");
+          sms.print(F("Starting"));
+          sms.endSMS(); 
+
           DEBUG(F("Requesting parameters")); DEBUG('\n');
           const String s = getParameters();
           
@@ -237,10 +242,22 @@ public:
         json.concat(F("\"}]"));
 //        DEBUG(json); DEBUG("\n");
   
-        const String path = String(F("/device/GSM-")) + imei + F("/samples");
-        if (!http.put(path, json)) {
-          Serial.println(F("Erreur de PUT"));
-          return false;
+        if (!gprs.ready()) {  // Si pas de GPRS, réessaie la connexion
+          connectGPRS();
+        }
+
+        if (gprs.ready()) {
+          const String path = String(F("/device/GSM-")) + imei + F("/samples");
+          if (!http.put(path, json)) {
+            Serial.println(F("Erreur de PUT"));
+            return false;
+          }
+        } else {
+          DEBUG(F("Warning: GPRS not ready, transmit later!"));
+          GSM_SMS sms;
+          sms.beginSMS("+33 632205550");
+          sms.print(F("GPRS not ready, transmit later!"));
+          sms.endSMS(); 
         }
       }
     }
@@ -286,7 +303,7 @@ protected:
  * @return Le temps epoch écoulé.
  */
 
-  uint32_t getNTP() const {
+  uint32_t getNTP() {
     struct __attribute__ ((packed)) NtpPacket { 
       uint8_t li_vn_mode;      // Eight bits. li, vn, and mode.
                                // li.   Two bits.   Leap indicator.
@@ -327,7 +344,11 @@ protected:
 
     Udp.begin(2390); // listening 
 
-    const IPAddress timeServer(163,172,12,49);
+    IPAddress timeServer;
+    if (!gprs.hostByName(F("fr.pool.ntp.org"), timeServer)) {
+      timeServer = IPAddress(163,172,12,49);
+    }
+
     Udp.beginPacket(timeServer, 123);
     Udp.write((const char*)&packetBuffer, sizeof(packetBuffer));
     Udp.endPacket();
