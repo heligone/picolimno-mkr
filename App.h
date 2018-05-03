@@ -32,19 +32,21 @@
 
 #include "sensors.h"
 #include "parameters.h"
-#include "http.h"
+// #include "http.h"
+#include <ArduinoHttpClient.h>
 
-/**
- * Fréquence d'échantillonnage, 1 fois par minute (60 sec) pour la prod, 
- * mais plus souvent sinon les tests sont trop long.
- */
-//#define ECHANT 60
-#define ECHANT 10
+
+// Temps en secondes entre deux mesures de distance
+#define INTERVAL_MESURES 10
+#define INTERVAL_PARAMS (15*60U)
+
 
 /**
  * Classe principale qui implémente l'application.
  */
 class App {
+  struct sample_t;
+
 public:
 /**
  * Factory for singleton App.
@@ -66,111 +68,86 @@ public:
  * @return boolean value to indicate if execution was right or not. A faulty exec. means the program can't continue and should be aborted.
  */
   bool setup() {
-    enum { STATE_IDLE, STATE_GSM_READY, STATE_GSM_ERROR, STATE_GPRS_READY, STATE_GPRS_ERROR, STATE_READY } state = STATE_IDLE;
-    bool dateCoherante = false;
 
-    while (true) {    // lancement de la machine a états
-      switch (state) {
-        case STATE_IDLE : {   // démarrage, connexion GSM...
-
-          modem.begin();
-          DEBUG(F("Setting up GSM connection..."));
-          int err;
-          for (byte i = 0; i < 10; ++i) {
-            err = gsmAccess.begin();
-            if (err != GSM_READY) {
-              DEBUG(F(" Not connected [err="));
-              DEBUG(err);
-              DEBUG(F("]..."));
-              delay(500);
-            } else break;
-          };
-          if (err != GSM_READY) {
-            DEBUG(F(" Timeout!")); DEBUG('\n');
-            state = STATE_GSM_ERROR;
-          } else {
-            DEBUG(F(" Connected.\n"));
-            state = STATE_GSM_READY;
-          }
-          break;
-        }
-        case STATE_GSM_READY : {  // gsm actif et récupération de l'emei et de l'heure puis connexion GSM...
-          do {
-            imei = modem.getIMEI();
-          } while (imei.length() == 0);
-          DEBUG(F("DeviceID: GSM-")); DEBUG(imei); DEBUG('\n');
-          
-          rtc.begin();
-          DEBUG(F("Setting time... "));
-          for(int i = 0; i < 10; ++i) {
-            DEBUG(i+1); DEBUG(',');
-            const time_t t = gsmAccess.getTime();
-            struct tm *const stm = gmtime(&t);
-            if ((1900 + stm->tm_year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante
-              rtc.setTime(stm->tm_hour, stm->tm_min, stm->tm_sec);
-              rtc.setDate(stm->tm_mday, stm->tm_mon + 1, stm->tm_year % 100);
-              dateCoherante = true;
-              break;  // succès
-            }
-            delay(500);
-          }
-          if (!dateCoherante) 
-            DEBUG(F("Warning inconsistent date!\n"));
-          DEBUG(F("- at ")); DEBUG(getTimestamp()); DEBUG('\n');
-          
-          DEBUG(F("Setting up GPRS connection..."));
-          if (connectGPRS()) {
-            DEBUG(F(" Connected.")); DEBUG('\n');
-            state = STATE_GPRS_READY;
-          } else {
-            DEBUG(F(" Timeout!")); DEBUG('\n');
-            state = STATE_GPRS_ERROR; 
-          }
-          break;
-        }
-        case STATE_GPRS_READY : {   // GPRS ok, envoi d'un status de démarrage
-          DEBUG(F("Sending Status Starting")); DEBUG('\n');
-          sendStatus(F("Starting"));
-
-          GSM_SMS sms;
-          sms.beginSMS("+33 632205550");
-          sms.print(F("Starting"));
-          sms.endSMS(); 
-
-          DEBUG(F("Requesting parameters")); DEBUG('\n');
-          const String s = getParameters();
-          
-          if (!dateCoherante) { // Recherche de la date NTP
-            const uint32_t epoch = getNTP();
-            struct tm *const stm = gmtime((long*)&epoch);
-            if ((1900 + stm->tm_year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante
-              rtc.setTime(stm->tm_hour, stm->tm_min, stm->tm_sec);
-              rtc.setDate(stm->tm_mday, stm->tm_mon + 1, stm->tm_year % 100);
-            } else {
-              DEBUG(F("Warning no NTP date!\n"));
-            }
-          }
-                    
-          state = STATE_READY;
-          break;
-        }
-        case STATE_READY : {  // Etat nominal, tous systèmes démarrés
-          if (!sensors.begin()) return false;
-          
-          pinMode(LED, OUTPUT);
-      
-          const byte sec = rtc.getSeconds();
-          rtc.setAlarmSeconds((sec + (ECHANT - 1 - (sec % ECHANT))) % 60);  // programmation de la prochaine alarme.
-          rtc.enableAlarm(rtc.MATCH_SS);
-          rtc.attachInterrupt(oneMinute);
-          fOneMinute = false;
-          
-          return true;
-        }          
-        default :
-          return false;
-      }
+// Connection GSM & GPRS    
+    DEBUG(F("Setting up GSM connection..."));
+    MODEM.begin();
+    int err;
+    for (byte i = 0; i < 10; ++i) {
+      err = gsmAccess.begin();
+      if (err != GSM_READY) {
+        DEBUG(F(" Not connected [err="));
+        DEBUG(err);
+        DEBUG(F("]..."));
+        delay(500);
+      } else break;
+    };
+    if (err != GSM_READY) {
+      DEBUG(F(" Timeout! No GSM found!\n"));
+      return false;
+    } else {
+      DEBUG(F(" Connected.\n"));
     }
+
+    DEBUG(F("Getting IMEI..."));
+    do {
+      GSMModem modem;
+      imei = modem.getIMEI();
+      delay(500);
+    } while (imei.length() == 0);
+    DEBUG(F(" DeviceID: GSM-")); DEBUG(imei); DEBUG('\n');
+
+    DEBUG(F("Setting up GPRS connection..."));
+    if (connectGPRS()) {
+      DEBUG(F(" Connected.")); DEBUG('\n');
+    } else {
+      DEBUG(F(" Timeout!")); DEBUG(F(" No GPRS connection! \n"));
+      return false;
+    }
+
+// Get Date NTP    
+    DEBUG(F("Requesting NTP date... "));
+    const uint32_t epoch = getNTP();
+    struct tm *const stm = gmtime((long*)&epoch);
+    if ((1900 + stm->tm_year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante
+      rtc.begin();
+      rtc.setTime(stm->tm_hour, stm->tm_min, stm->tm_sec);
+      rtc.setDate(stm->tm_mday, stm->tm_mon + 1, stm->tm_year % 100);
+      DEBUG(getTimestamp());
+      DEBUG(F("(UTC) - Succeded.\n"));
+    } else {
+      DEBUG(F("Warning no NTP date!\n"));
+      return false;
+    }
+
+// Sending Status
+    DEBUG(F("Sending Status Starting\n"));
+    sendStatus(F("Starting"));
+
+// Get parameters    
+//    DEBUG(F("Requesting parameters")); DEBUG('\n');
+//    const String s = getParameters();
+    
+    if (!sensors.begin()) return false;
+          
+//    pinMode(LED, OUTPUT);
+
+// Initiat. ranges data set    
+    for (byte i = 0; i < 15; ++i) ranges[i] = sensors.sampleRange();
+
+// Define next timer's interrupt
+    DEBUG(F("Start timer.\n"));
+    const byte sec = rtc.getSeconds();
+    const byte minu = rtc.getMinutes();
+    const unsigned t = minu * 60U + sec + INTERVAL_MESURES;
+    rtc.setAlarmSeconds(t % 60);
+    rtc.setAlarmMinutes((t / 60) % 60);
+
+    rtc.enableAlarm(rtc.MATCH_MMSS);
+    rtc.attachInterrupt(App::intTimer);
+    App::fIntTimer = false;
+    
+    return true;
   }
 
 /**
@@ -179,102 +156,60 @@ public:
  * @return boolean value to indicate if execution was right or not. A faulty exec. means the program can't continue and should be aborted.
  */
   bool loop() {
-    static unsigned lastDistance;
-    static unsigned nbEchant = 0;
-    ++nbEchant;
-    
+    static byte nbEchant = 0;
 //    rtc.standbyMode();
     
 // Si on a détecté un changement de minute, on lance les mesures nécessaires
-    if (App::fOneMinute) {
+    if (App::fIntTimer) {
       DEBUG(F("Wakeup @ "));
       DEBUG(getTimestamp());
       DEBUG("\n");
+// Calcul de la prochaine interruption
       const byte sec = rtc.getSeconds();
-//      const byte minu = rtc.getMinutes();
-      App::fOneMinute = false;
-      rtc.setAlarmSeconds((sec + (ECHANT - 1 - (sec % ECHANT))) % 60);
+      const byte minu = rtc.getMinutes();
+      const unsigned t = minu * 60 + sec + INTERVAL_MESURES - 1;
+      App::fIntTimer = false;
+      rtc.setAlarmSeconds(t % 60);
+      rtc.setAlarmMinutes((t / 60) % 60);
 
-      unsigned d[11];
-      for (int i = 10; i >= 0; --i) {
+      unsigned d[5];
+      for (byte i = 0; i < 5; ++i) {
         d[i] = sensors.sampleRange();
       }
-      insertionSortR(d, 11);
-      const unsigned distance = d[5];
-      const sample_t sample = { rtc.getEpoch(), F("range"), distance / 10.0f };
-      queue.push(sample);
+      insertionSortR(d, 3);
+      const unsigned distance = d[3];
       DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG('\n');
   
-      if (!(nbEchant % 15)) { // tous les 15 échantillons
-        float temp, hygro = 0;
+      for (byte i = 0; i < 15; ++i) {
+        ranges[i] = (i < 14 ? ranges[i + 1] : distance);
+        DEBUG(ranges[i]); DEBUG('-');
+      }
+      DEBUG('\n');
+      nbEchant = (nbEchant + 1) % 15;
+      if (!nbEchant) {
+        unsigned e[15];
+        memcpy(e, ranges, sizeof(unsigned)*15);
+        insertionSortR(e, 7);
+        const unsigned distance = e[7];
+        const sample_t sample = { rtc.getEpoch(), F("range"), distance / 10.0f };
+        sendSample(sample);
+
+        float temp, hygro = 0.0;
         if (sensors.sampleAM2302(temp, hygro)) {
           const sample_t sample1 = { rtc.getEpoch(), F("temp"), temp };
-          queue.push(sample1);
+          sendSample(sample1);
           DEBUG(F("Temperature : ")); DEBUG(temp); DEBUG('\n');
           
           const sample_t sample2 = { rtc.getEpoch(), F("hygro"), hygro };
-          queue.push(sample2);
+          sendSample(sample2);
           DEBUG(F("Hygrometrie : ")); DEBUG(hygro); DEBUG('\n');
         }
         const float vBat = sensors.sampleBattery();
         const sample_t sample3 = { rtc.getEpoch(), F("vbat"), vBat };
-        queue.push(sample3);
+        sendSample(sample3);
         DEBUG("Batterie : "); DEBUG(vBat); DEBUG('\n');
       }
-            
-#define ALERT_LEVEL 500
-      const bool alert = (lastDistance < ALERT_LEVEL) &&  (distance >= ALERT_LEVEL);
-      lastDistance = distance;
-
-// Transmission des données si quantité suffisante ou alerte.
-      if ((queue.count() >= App::QUEUE_DEPTH) || alert) {  
-        String json;
-        while (!queue.isEmpty()) {
-          const sample_t sample = queue.pop();
-          json.concat(json.length() ? F("\"},{") : F("[{"));
-          json.concat(F("\"epoch\":\""));
-          json.concat(sample.epoch);
-          json.concat(F("\",\"key\":\""));
-          json.concat(sample.variable);
-          json.concat(F("\",\"value\":\""));
-          json.concat(sample.value);
-        }
-        json.concat(F("\"}]"));
-//        DEBUG(json); DEBUG("\n");
-  
-        if (!gprs.ready()) {  // Si pas de GPRS, réessaie la connexion
-          connectGPRS();
-        }
-
-        if (gprs.ready()) {
-          const String path = String(F("/device/GSM-")) + imei + F("/samples");
-          if (!http.put(path, json)) {
-            Serial.println(F("Erreur de PUT"));
-            return false;
-          }
-        } else {
-          DEBUG(F("Warning: GPRS not ready, transmit later!"));
-          GSM_SMS sms;
-          sms.beginSMS("+33 632205550");
-          sms.print(F("GPRS not ready, transmit later!"));
-          sms.endSMS(); 
-        }
-      }
-    }
-
-// Reception d'un SMS ?
-    GSM_SMS sms;
-    if (sms.available()) {
-      DEBUG(F("SMS recu: "));
-      String s;
-      int c;
-      while ((c = sms.read()) != -1) {
-        s += char(c);
-      }
-      DEBUG(s); DEBUG('\n');
-      sms.flush();
-    }
-
+    }  
     return true;
   }
 
@@ -289,7 +224,7 @@ protected:
   App(const __FlashStringHelper apn[], const __FlashStringHelper login[], const __FlashStringHelper password[]) :
     sensors(TRIGGER, ECHO, AM2302),
     parameters(),
-    http(F("api.picolimno.fr"), 443),
+//    http(F("api.picolimno.fr"), 443),
     GPRS_APN(apn), 
     GPRS_LOGIN(login),
     GPRS_PASSWORD(password)
@@ -369,12 +304,12 @@ protected:
 
 
 /**
- * Called every ECHANT second by interruption.
+ * Called every Timer's interruption.
  * Wake the CPU up.
  */
   static 
-  void oneMinute() {
-    fOneMinute = true;
+  void intTimer() {
+    App::fIntTimer = true;
   }
 
 /** 
@@ -424,14 +359,102 @@ protected:
     payload += LocalIP[3];
     payload += F("\"}");
 
-    if (!http.put(path, payload)) {
-      Serial.println(F("Erreur de PUT"));
+    const String serverName = String(F("api.picolimno.fr"));
+    const unsigned serverPort = 80;
+
+    GSMClient client;
+    if (!client.connect(serverName.c_str(), serverPort)) {
+      DEBUG(F("No connection !"));
       return false;
     }
-    
+
+    HttpClient http = HttpClient(client, serverName, serverPort);
+    const int err = http.put(path, String(F("application/json")), payload);
+    if (err != 0) {
+      DEBUG(F("Error on PUT (")); DEBUG(err); DEBUG(F(")!\n"));
+      return false;
+    }
+    const int status = http.responseStatusCode();
+    if (status <= 0) {
+      DEBUG(F("Internal error on PUT")); DEBUG(status); DEBUG('\n');
+      return false;
+    } else if (status < 200 && status >= 300) {
+      DEBUG(F("HTTP Response : ")); DEBUG(status); DEBUG('\n');
+      return false;
+    } else {
+      DEBUG(F("Success (")); DEBUG(status); DEBUG(F(")\n"));
+    }
+
+    while (!http.endOfHeadersReached()) {
+      if (http.headerAvailable()) {
+        const String name = http.readHeaderName();
+        const String value = http.readHeaderValue();
+        DEBUG(F("Header ")); DEBUG(name); DEBUG(':'); DEBUG(value); DEBUG('\n');
+      }
+    }
+    const String body = http.responseBody();
+    DEBUG(F("Body: ")); DEBUG(body); DEBUG('\n');
+      
     return true;    
   }
   
+/**
+ * Transmet un échantillon sample_t sérialisé sous la forme JSON d'un tableau d'un seul élément.
+ * @param sample L'échantillon à traduire en JSON avant de le transmettre.
+ * @return Le succès de la transmission, ou pas.
+ */
+  bool sendSample(const sample_t& sample) {
+    const String path = String(F("/device/GSM-")) + imei + F("/samples");
+
+    String json(F("[{"));
+    json += F("\"epoch\":\"");
+    json += sample.epoch;
+    json += F("\",\"key\":\"");
+    json += sample.variable;
+    json += F("\",\"value\":\"");
+    json += String(sample.value);
+    json += F("\"}]");
+    DEBUG(json); DEBUG('\n');
+
+    const String serverName = String(F("api.picolimno.fr"));
+    const unsigned serverPort = 80;
+
+    GSMClient client;
+    if (!client.connect(serverName.c_str(), serverPort)) {
+      DEBUG(F("No connection !"));
+      return false;
+    }
+
+    HttpClient http = HttpClient(client, serverName, serverPort);
+    const int err = http.put(path, String(F("application/json")), json);
+    if (err != 0) {
+      DEBUG(F("Error on PUT (")); DEBUG(err); DEBUG(F(")!\n"));
+      return false;
+    }
+    const int status = http.responseStatusCode();
+    if (status <= 0) {
+      DEBUG(F("Internal error on PUT")); DEBUG(status); DEBUG('\n');
+      return false;
+    } else if (status < 200 && status >= 300) {
+      DEBUG(F("HTTP Response : ")); DEBUG(status); DEBUG('\n');
+      return false;
+    } else {
+      DEBUG(F("Success (")); DEBUG(status); DEBUG(F(")\n"));
+    }
+
+    while (!http.endOfHeadersReached()) {
+      if (http.headerAvailable()) {
+        const String name = http.readHeaderName();
+        const String value = http.readHeaderValue();
+        DEBUG(F("Header ")); DEBUG(name); DEBUG(':'); DEBUG(value); DEBUG('\n');
+      }
+    }
+    const String body = http.responseBody();
+    DEBUG(F("Body: ")); DEBUG(body); DEBUG('\n');
+      
+    return true;    
+  }
+
 /**
  * Retourne la date et l'heure maintenues par la RTC locale.
  * 
@@ -468,6 +491,7 @@ protected:
  * 
  * @return Une chaîne JSON contenant chaque paramètre et sa valeur.
  */
+ /*
   String getParameters() {
     const String path = String(F("/device/GSM-")) + imei + F("/parameters");
     String response;
@@ -479,19 +503,19 @@ protected:
       return String("");
     }
   }
+*/  
  
 private:
   static App* pApp;
 
   Sensors sensors;
   Parameters parameters;
-  Http http;
+//  Http http;
 
   const String GPRS_APN;
   const String GPRS_LOGIN;
   const String GPRS_PASSWORD;
 
-  GSMModem modem;
   GPRS gprs;
   GSM gsmAccess;
 
@@ -521,14 +545,16 @@ private:
   QueueArray<sample_t> queue;
 
   static volatile
-  bool fOneMinute;
+  bool fIntTimer;
+
+  unsigned ranges[15];
 
 };
 
 App* App::pApp;
 RTCZero App::rtc;
 QueueArray<App::sample_t> App::queue;
-volatile bool App::fOneMinute;
+volatile bool App::fIntTimer;
 const int App::QUEUE_DEPTH = 10;
 
 
