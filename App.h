@@ -120,6 +120,8 @@ public:
       DEBUG(F("Connected.\n"));
     }
 
+// Mise à l'heure
+    rtc.begin();
 #if GSM_NTP
 // Get GSM Network date
     DEBUG(F("Requesting GSM date... "));
@@ -133,7 +135,6 @@ public:
     const byte mon = dt.substring(3,5).toInt();
     const byte mday = dt.substring(6,8).toInt();
     if ((2000 + year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante avec année de compilation
-      rtc.begin();
       const byte hour = dt.substring(9,11).toInt();
       const byte min = dt.substring(12,14).toInt();
       const byte sec = dt.substring(15,17).toInt();
@@ -148,7 +149,6 @@ DEBUG(epoch);
     struct tm *const stm = gmtime((long*)&epoch);
 
     if ((1900 + stm->tm_year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante avec année de compilation
-      rtc.begin();
       rtc.setTime(stm->tm_hour, stm->tm_min, stm->tm_sec);
       rtc.setDate(stm->tm_mday, stm->tm_mon, stm->tm_year);
 #endif    
