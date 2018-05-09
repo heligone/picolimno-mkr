@@ -24,27 +24,27 @@
  */
 #pragma once
 
-#include <MKRGSM.h>
+// #include <MKRGSM.h>
 #include <RTCZero.h>
 #include <ctime>
 #include <cassert>
-// #include <QueueArray.h>
 
 #include "sensors.h"
 #include "parameters.h"
 
 #define TINY_GSM_MODEM_UBLOX
 #include <TinyGsmClient.h>
-// #include <TinyGsmClientUBLOX.h>
-// #include <TinyGsmCommon.h>
-// #include <TinyGsmFifo.h>
 
 #include <ArduinoHttpClient.h>
 
 // Temps en secondes entre deux mesures de distance
 #define INTERVAL_MESURES 10
-#define INTERVAL_PARAMS (15*60U)
 
+// Indique la méthode utilisée pour mettre le Pico à l'heure :
+// 0 : NTP,
+// 1 : GSM.
+
+#define GSM_NTP 1
 
 /**
  * Classe principale qui implémente l'application.
@@ -83,7 +83,7 @@ public:
     modem.restart();
     const String info = modem.getModemInfo();
     DEBUG(F("TinyGSM using ")); DEBUG(info); DEBUG('\n');
-    
+
 // Connection GSM & GPRS    
     DEBUG(F("Setting up GSM connection... "));
     int err;
@@ -120,7 +120,12 @@ public:
       DEBUG(F("Connected.\n"));
     }
 
+#if GSM_NTP
+// Get GSM Network date
     DEBUG(F("Requesting GSM date... "));
+
+// Si le compilateur plante sur la ligne suivante, il faudrait mettre à jour le source de TinyGSM sur la base de cette proposition :
+// https://github.com/vshymanskyy/TinyGSM/pull/165/commits/712eaea3eb1f6b8c55747f0863a8ee3478991318    
     const String dt = modem.getGSMDateTime(DATE_FULL);
     DEBUG(dt); DEBUG('\n');
 
@@ -134,6 +139,19 @@ public:
       const byte sec = dt.substring(15,17).toInt();
       rtc.setTime((hour + 22) % 24, min, sec);
       rtc.setDate(mday, mon, year);
+#else
+// Get Date NTP    
+    DEBUG(F("Requesting NTP date... "));
+    const uint32_t epoch = getNTP();
+DEBUG(epoch);
+    
+    struct tm *const stm = gmtime((long*)&epoch);
+
+    if ((1900 + stm->tm_year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante avec année de compilation
+      rtc.begin();
+      rtc.setTime(stm->tm_hour, stm->tm_min, stm->tm_sec);
+      rtc.setDate(stm->tm_mday, stm->tm_mon, stm->tm_year);
+#endif    
       DEBUG(getTimestamp());
       DEBUG(F(" (UTC) - Succeded.\n"));
     } else {
@@ -259,7 +277,7 @@ protected:
  * @param aURL l'url du service ntp utilisé.
  * @return Le temps epoch écoulé.
  */
-#if 0
+#if GSM_NTP == 0
   uint32_t getNTP() {
     struct __attribute__ ((packed)) NtpPacket { 
       uint8_t li_vn_mode;      // Eight bits. li, vn, and mode.
@@ -301,10 +319,8 @@ protected:
 
     Udp.begin(2390); // listening 
 
-    IPAddress timeServer;
-    if (!gprs.hostByName(F("fr.pool.ntp.org"), timeServer)) {
-      timeServer = IPAddress(163,172,12,49);
-    }
+// Résoudre fr.pool.ntp.org ou utiliser une IP  
+    const IPAddress timeServer(195,154,107,205);
 
     Udp.beginPacket(timeServer, 123);
     Udp.write((const char*)&packetBuffer, sizeof(packetBuffer));
@@ -323,7 +339,7 @@ protected:
 
     return 0;    
   };
-#endif
+#endif 
 
 /**
  * Called every Timer's interruption.
