@@ -27,14 +27,19 @@
 #include <MKRGSM.h>
 #include <RTCZero.h>
 #include <ctime>
-#include <assert.h>
-#include <QueueArray.h>
+#include <cassert>
+// #include <QueueArray.h>
 
 #include "sensors.h"
 #include "parameters.h"
-// #include "http.h"
-#include <ArduinoHttpClient.h>
 
+#define TINY_GSM_MODEM_UBLOX
+#include <TinyGsmClient.h>
+// #include <TinyGsmClientUBLOX.h>
+// #include <TinyGsmCommon.h>
+// #include <TinyGsmFifo.h>
+
+#include <ArduinoHttpClient.h>
 
 // Temps en secondes entre deux mesures de distance
 #define INTERVAL_MESURES 10
@@ -62,59 +67,75 @@ public:
   
 /**
  * Lazy setup of all devices & others parameters, especialy connections to GSM & GPRS services.
- * C'est une machine à états (https://fr.wikipedia.org/wiki/%C3%89tat_(patron_de_conception).
- * @todo A implémenter dans les règles de l'art, pas avec juste une boucle et un switch.
  * 
  * @return boolean value to indicate if execution was right or not. A faulty exec. means the program can't continue and should be aborted.
  */
   bool setup() {
 
+// set serial baudrate
+    SerialGSM.begin(115200);
+// hard resert
+    pinMode(GSM_RESETN, OUTPUT);
+    digitalWrite(GSM_RESETN, HIGH);
+    delay(100);
+    digitalWrite(GSM_RESETN, LOW);
+
+    modem.restart();
+    const String info = modem.getModemInfo();
+    DEBUG(F("TinyGSM using ")); DEBUG(info); DEBUG('\n');
+    
 // Connection GSM & GPRS    
-    DEBUG(F("Setting up GSM connection..."));
-    MODEM.begin();
+    DEBUG(F("Setting up GSM connection... "));
     int err;
     for (byte i = 0; i < 10; ++i) {
-      err = gsmAccess.begin();
-      if (err != GSM_READY) {
-        DEBUG(F(" Not connected [err="));
+      err = modem.waitForNetwork();
+      if (!err) {
         DEBUG(err);
-        DEBUG(F("]..."));
+        DEBUG(' '); delay(500);
+      } else break;
+    }        
+    if (!err) {
+      DEBUG(F("Timeout! No GSM found!\n"));
+      return false;
+    } else {
+      DEBUG(F("Connected.\n"));
+    }
+
+    DEBUG(F("Getting IMEI... "));
+    imei = modem.getIMEI();
+    DEBUG(F("DeviceID: GSM-")); DEBUG(imei); DEBUG('\n');
+
+    DEBUG(F("Setting up GPRS connection... "));
+    for (byte i = 0; i < 10; ++i) {
+      err = modem.gprsConnect(String(GPRS_APN).c_str(), String(GPRS_LOGIN).c_str(), String(GPRS_PASSWORD).c_str());
+      if (!err) {
+        DEBUG(err); DEBUG(' ');
         delay(500);
       } else break;
-    };
-    if (err != GSM_READY) {
-      DEBUG(F(" Timeout! No GSM found!\n"));
+    }        
+    if (!err) {
+      DEBUG(F("Timeout! No GPRS network found!\n"));
       return false;
     } else {
-      DEBUG(F(" Connected.\n"));
+      DEBUG(F("Connected.\n"));
     }
 
-    DEBUG(F("Getting IMEI..."));
-    do {
-      GSMModem modem;
-      imei = modem.getIMEI();
-      delay(500);
-    } while (imei.length() == 0);
-    DEBUG(F(" DeviceID: GSM-")); DEBUG(imei); DEBUG('\n');
+    DEBUG(F("Requesting GSM date... "));
+    const String dt = modem.getGSMDateTime(DATE_FULL);
+    DEBUG(dt); DEBUG('\n');
 
-    DEBUG(F("Setting up GPRS connection..."));
-    if (connectGPRS()) {
-      DEBUG(F(" Connected.")); DEBUG('\n');
-    } else {
-      DEBUG(F(" Timeout!")); DEBUG(F(" No GPRS connection! \n"));
-      return false;
-    }
-
-// Get Date NTP    
-    DEBUG(F("Requesting NTP date... "));
-    const uint32_t epoch = getNTP();
-    struct tm *const stm = gmtime((long*)&epoch);
-    if ((1900 + stm->tm_year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante
+    const unsigned year = dt.substring(0,2).toInt();
+    const byte mon = dt.substring(3,5).toInt();
+    const byte mday = dt.substring(6,8).toInt();
+    if ((2000 + year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante avec année de compilation
       rtc.begin();
-      rtc.setTime(stm->tm_hour, stm->tm_min, stm->tm_sec);
-      rtc.setDate(stm->tm_mday, stm->tm_mon + 1, stm->tm_year % 100);
+      const byte hour = dt.substring(9,11).toInt();
+      const byte min = dt.substring(12,14).toInt();
+      const byte sec = dt.substring(15,17).toInt();
+      rtc.setTime((hour + 22) % 24, min, sec);
+      rtc.setDate(mday, mon, year);
       DEBUG(getTimestamp());
-      DEBUG(F("(UTC) - Succeded.\n"));
+      DEBUG(F(" (UTC) - Succeded.\n"));
     } else {
       DEBUG(F("Warning no NTP date!\n"));
       return false;
@@ -127,7 +148,7 @@ public:
 // Get parameters    
 //    DEBUG(F("Requesting parameters")); DEBUG('\n');
 //    const String s = getParameters();
-    
+
     if (!sensors.begin()) return false;
           
 //    pinMode(LED, OUTPUT);
@@ -227,7 +248,8 @@ protected:
 //    http(F("api.picolimno.fr"), 443),
     GPRS_APN(apn), 
     GPRS_LOGIN(login),
-    GPRS_PASSWORD(password)
+    GPRS_PASSWORD(password),
+    modem(SerialGSM)
   {
   }
 
@@ -237,7 +259,7 @@ protected:
  * @param aURL l'url du service ntp utilisé.
  * @return Le temps epoch écoulé.
  */
-
+#if 0
   uint32_t getNTP() {
     struct __attribute__ ((packed)) NtpPacket { 
       uint8_t li_vn_mode;      // Eight bits. li, vn, and mode.
@@ -301,7 +323,7 @@ protected:
 
     return 0;    
   };
-
+#endif
 
 /**
  * Called every Timer's interruption.
@@ -310,26 +332,6 @@ protected:
   static 
   void intTimer() {
     App::fIntTimer = true;
-  }
-
-/** 
- * Assure la connection au réseau GPRS et retourne le succès de l'opération.
- * Il y a un timeout de 5s pour essayer d'assurer la connection.
- *
- * @return L'état de la connection à l'issue de la tentative.
- */
-  bool connectGPRS() {
-    int err;
-    for (byte i = 0; i < 10; ++i) {
-      err = gprs.attachGPRS(GPRS_APN.c_str(), GPRS_LOGIN.c_str(), GPRS_PASSWORD.c_str());
-      if (err != GPRS_READY) {
-        DEBUG(F(" Not connected [err="));
-        DEBUG(err);
-        DEBUG(F("]..."));
-        delay(500);            
-      } else break;
-    }
-    return (err == GPRS_READY);
   }
 
 /**
@@ -349,20 +351,13 @@ protected:
     payload += F("\",\"status\":\"");
     payload += aState;
     payload += F("\",\"IP\":\"");
-    IPAddress LocalIP = gprs.getIPAddress();
-    payload += LocalIP[0];
-    payload += '.';
-    payload += LocalIP[1];
-    payload += '.';
-    payload += LocalIP[2];
-    payload += '.';
-    payload += LocalIP[3];
+    payload += modem.getLocalIP();
     payload += F("\"}");
 
     const String serverName = String(F("api.picolimno.fr"));
     const unsigned serverPort = 80;
 
-    GSMClient client;
+    TinyGsmClient client(modem);
     if (!client.connect(serverName.c_str(), serverPort)) {
       DEBUG(F("No connection !"));
       return false;
@@ -394,7 +389,8 @@ protected:
     }
     const String body = http.responseBody();
     DEBUG(F("Body: ")); DEBUG(body); DEBUG('\n');
-      
+
+    client.stop();
     return true;    
   }
   
@@ -419,7 +415,7 @@ protected:
     const String serverName = String(F("api.picolimno.fr"));
     const unsigned serverPort = 80;
 
-    GSMClient client;
+    TinyGsmClient client(modem);;
     if (!client.connect(serverName.c_str(), serverPort)) {
       DEBUG(F("No connection !"));
       return false;
@@ -451,7 +447,8 @@ protected:
     }
     const String body = http.responseBody();
     DEBUG(F("Body: ")); DEBUG(body); DEBUG('\n');
-      
+
+    client.stop();
     return true;    
   }
 
@@ -512,12 +509,14 @@ private:
   Parameters parameters;
 //  Http http;
 
-  const String GPRS_APN;
-  const String GPRS_LOGIN;
-  const String GPRS_PASSWORD;
+  const __FlashStringHelper* GPRS_APN;
+  const __FlashStringHelper* GPRS_LOGIN;
+  const __FlashStringHelper* GPRS_PASSWORD;
 
-  GPRS gprs;
-  GSM gsmAccess;
+  TinyGsm modem;
+  
+//  GPRS gprs;
+//  GSM gsmAccess;
 
   static RTCZero rtc;
 
@@ -541,8 +540,8 @@ private:
     float value;
   };
 
-  static 
-  QueueArray<sample_t> queue;
+//  static 
+//  QueueArray<sample_t> queue;
 
   static volatile
   bool fIntTimer;
@@ -553,7 +552,7 @@ private:
 
 App* App::pApp;
 RTCZero App::rtc;
-QueueArray<App::sample_t> App::queue;
+// QueueArray<App::sample_t> App::queue;
 volatile bool App::fIntTimer;
 const int App::QUEUE_DEPTH = 10;
 
