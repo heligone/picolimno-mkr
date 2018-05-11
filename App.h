@@ -40,9 +40,10 @@
 // Temps en secondes entre deux mesures de distance
 #define INTERVAL_MESURES 10
 
-// Indique la méthode utilisée pour mettre le Pico à l'heure :
-// 0 : NTP,
-// 1 : GSM.
+// Indique la méthode utilisée pour mettre le Pico à l'heure, ou rien :
+// pas de define : pas de mise à l'heure,
+// 0 : GSM,
+// 1 : NTP.
 
 #define GSM_NTP 1
 
@@ -122,7 +123,7 @@ public:
 
 // Mise à l'heure
     rtc.begin();
-#if GSM_NTP
+#if (GSM_NTP == 0)
 // Get GSM Network date
     DEBUG(F("Requesting GSM date... "));
 
@@ -140,7 +141,13 @@ public:
       const byte sec = dt.substring(15,17).toInt();
       rtc.setTime((hour + 22) % 24, min, sec);
       rtc.setDate(mday, mon, year);
-#else
+      DEBUG(getTimestamp());
+      DEBUG(F(" (UTC) - Succeded.\n"));
+    } else {
+      DEBUG(F("Warning no GSM Network date!\n"));
+      return false;
+    }
+#elif (GSM_NTP == 1)
 // Get Date NTP    
     DEBUG(F("Requesting NTP date... "));
     const uint32_t epoch = getNTP();
@@ -151,13 +158,13 @@ DEBUG(epoch);
     if ((1900 + stm->tm_year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante avec année de compilation
       rtc.setTime(stm->tm_hour, stm->tm_min, stm->tm_sec);
       rtc.setDate(stm->tm_mday, stm->tm_mon, stm->tm_year);
-#endif    
       DEBUG(getTimestamp());
       DEBUG(F(" (UTC) - Succeded.\n"));
     } else {
       DEBUG(F("Warning no NTP date!\n"));
       return false;
     }
+#endif    
 
 // Sending Status
     DEBUG(F("Sending Status Starting\n"));
@@ -277,7 +284,6 @@ protected:
  * @param aURL l'url du service ntp utilisé.
  * @return Le temps epoch écoulé.
  */
-#if GSM_NTP == 0
   uint32_t getNTP() {
     struct __attribute__ ((packed)) NtpPacket { 
       uint8_t li_vn_mode;      // Eight bits. li, vn, and mode.
@@ -315,8 +321,52 @@ protected:
     packetBuffer.poll = 6;
     packetBuffer.precision = 0xEC;
 
-    GSMUDP Udp;
+    modem.sendAT(GF("+USOCR=17"));
+    String socket;
+    if (modem.waitResponse(1000L, socket) == 1) {
+      socket.replace("+USOCR:", "");
+      socket.replace(GSM_NL "OK" GSM_NL, "");
+      socket.replace(GSM_NL, " ");
+    }
+    const String ip("195.154.107.205");
+    const String len(sizeof(packetBuffer));
+    modem.sendAT(GF("+USOST=") + socket + ',' + '"' + ip + GF("\",123,") + len);
+    SerialGSM.readStringUntil('@');
+    SerialGSM.write((char*)&packetBuffer, sizeof(packetBuffer));
 
+    String rep;
+    if (modem.waitResponse(1000L, rep) == 1) {
+
+      modem.sendAT(GF("+USORF=") + socket + ',' + len);
+      if (modem.waitResponse(1000L, rep) == 1) {
+        rep.replace("+USORF:", "");
+        rep.replace(GSM_NL "OK" GSM_NL, "");
+        rep.replace(GSM_NL, " ");
+        const int ipInd = rep.indexOf(',');
+        const int portInd = rep.indexOf(',', ipInd+1);
+        const int sizeInd = rep.indexOf(',', portInd+1);
+        const int dataInd = rep.indexOf(',', sizeInd+1);
+        const unsigned s = rep.substring(sizeInd+1, dataInd).toInt();
+
+        memcpy(&packetBuffer, rep.c_str() + (dataInd + 2), s);
+        
+        return ((packetBuffer.txTm_s[0] * 0x100UL + packetBuffer.txTm_s[1]) * 0x100UL + packetBuffer.txTm_s[2]) * 0x100UL + packetBuffer.txTm_s[3] - 2208988800UL;
+      }
+    }
+        
+/*
+    String res;
+    if (modem.waitResponse(1000L, res) == 1) {
+      res.replace(GSM_NL "OK" GSM_NL, "");
+      res.replace(GSM_NL, " ");
+      res.trim();
+      DEBUG(res);   
+    } else {
+      DEBUG("Rien!");
+    }
+*/
+
+/*    
     Udp.begin(2390); // listening 
 
 // Résoudre fr.pool.ntp.org ou utiliser une IP  
@@ -336,10 +386,9 @@ protected:
         delay(500);
       }
     } while (millis() - start < 30000UL);
-
-    return 0;    
+*/
+    return 0;
   };
-#endif 
 
 /**
  * Called every Timer's interruption.
