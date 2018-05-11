@@ -155,7 +155,8 @@ public:
 
     if ((1900 + stm->tm_year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante avec année de compilation
       rtc.setTime(stm->tm_hour, stm->tm_min, stm->tm_sec);
-      rtc.setDate(stm->tm_mday, stm->tm_mon, stm->tm_year);
+      rtc.setDate(stm->tm_mday, stm->tm_mon + 1, stm->tm_year % 100);
+      DEBUG(stm->tm_mday); DEBUG('/'); DEBUG(stm->tm_mon); DEBUG('/'); DEBUG(stm->tm_year); DEBUG('\n');
       DEBUG(getTimestamp());
       DEBUG(F(" (UTC) - Succeded.\n"));
     } else {
@@ -345,25 +346,21 @@ protected:
         const int sizeInd = rep.indexOf(',', portInd+1);
         const int dataInd = rep.indexOf(',', sizeInd+1);
         const unsigned s = rep.substring(sizeInd+1, dataInd).toInt();
-
+        if (s != sizeof(packetBuffer)) {
+          DEBUG("Invalide NTP response length!");
+          return 0;
+        }
         memcpy(&packetBuffer, rep.c_str() + (dataInd + 2), s);
-        
         return ((packetBuffer.txTm_s[0] * 0x100UL + packetBuffer.txTm_s[1]) * 0x100UL + packetBuffer.txTm_s[2]) * 0x100UL + packetBuffer.txTm_s[3] - 2208988800UL;
+      } else {
+        DEBUG("NTP Response Error!");
+        return 0;
       }
+    } else {
+      DEBUG("NTP no response!");
+      return 0;
     }
         
-/*
-    String res;
-    if (modem.waitResponse(1000L, res) == 1) {
-      res.replace(GSM_NL "OK" GSM_NL, "");
-      res.replace(GSM_NL, " ");
-      res.trim();
-      DEBUG(res);   
-    } else {
-      DEBUG("Rien!");
-    }
-*/
-
 /*    
     Udp.begin(2390); // listening 
 
