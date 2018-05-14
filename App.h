@@ -28,6 +28,7 @@
 #include <RTCZero.h>
 #include <ctime>
 #include <cassert>
+// #include <algorithm> 
 
 #include "sensors.h"
 #include "parameters.h"
@@ -46,6 +47,15 @@
 // 1 : NTP.
 
 #define GSM_NTP 1
+
+int compare( const void* a, const void* b) {
+   const unsigned int_a = * ( (unsigned*) a );
+   const unsigned int_b = * ( (unsigned*) b );
+
+   // an easy expression for comparing
+   return (int_a > int_b) - (int_a < int_b);
+};
+
 
 /**
  * Classe principale qui implémente l'application.
@@ -221,7 +231,7 @@ public:
       for (byte i = 0; i < 5; ++i) {
         d[i] = sensors.sampleRange();
       }
-      insertionSortR(d, 3);
+      qsort(d, 5, sizeof(unsigned), compare);
       const unsigned distance = d[3];
       DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG('\n');
   
@@ -234,7 +244,10 @@ public:
       if (!nbEchant) {
         unsigned e[15];
         memcpy(e, ranges, sizeof(unsigned)*15);
-        insertionSortR(e, 7);
+        qsort(e, 15, sizeof(unsigned), compare );
+                
+        for (int i = 0; i < 15; ++i) { DEBUG(e[i]); DEBUG('-'); }
+        DEBUG('\n');
         const unsigned distance = e[7];
         const sample_t sample = { rtc.getEpoch(), F("range"), distance / 10.0f };
         sendSample(sample);
