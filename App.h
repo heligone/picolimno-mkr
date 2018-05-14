@@ -48,15 +48,6 @@
 
 #define GSM_NTP 1
 
-int compare( const void* a, const void* b) {
-   const unsigned int_a = * ( (unsigned*) a );
-   const unsigned int_b = * ( (unsigned*) b );
-
-   // an easy expression for comparing
-   return (int_a > int_b) - (int_a < int_b);
-};
-
-
 /**
  * Classe principale qui implémente l'application.
  */
@@ -227,45 +218,59 @@ public:
       rtc.setAlarmSeconds(t % 60);
       rtc.setAlarmMinutes((t / 60) % 60);
 
-      unsigned d[5];
-      for (byte i = 0; i < 5; ++i) {
+#define RANGE_SEQ_LENGTH 5
+      unsigned d[RANGE_SEQ_LENGTH];
+      for (byte i = 0; i < RANGE_SEQ_LENGTH; ++i) {
         d[i] = sensors.sampleRange();
       }
-      qsort(d, 5, sizeof(unsigned), compare);
-      const unsigned distance = d[3];
+      qsort(d, RANGE_SEQ_LENGTH, sizeof(unsigned), [](const void* a, const void* b) -> int { 
+        const unsigned int_a = * ( (unsigned*) a );
+        const unsigned int_b = * ( (unsigned*) b );
+        return (int_a > int_b) - (int_a < int_b);
+      });
+      
+      const unsigned distance = d[RANGE_SEQ_LENGTH % 2 ? (RANGE_SEQ_LENGTH / 2) + 1 : RANGE_SEQ_LENGTH / 2];
       DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG('\n');
   
-      for (byte i = 0; i < 15; ++i) {
-        ranges[i] = (i < 14 ? ranges[i + 1] : distance);
+#define RANGE_REP_LENGTH 15
+      for (byte i = 0; i < RANGE_REP_LENGTH; ++i) {
+        ranges[i] = (i < (RANGE_REP_LENGTH - 1) ? ranges[i + 1] : distance);
         DEBUG(ranges[i]); DEBUG('-');
       }
       DEBUG('\n');
-      nbEchant = (nbEchant + 1) % 15;
+      nbEchant = (nbEchant + 1) % RANGE_REP_LENGTH;
       if (!nbEchant) {
-        unsigned e[15];
-        memcpy(e, ranges, sizeof(unsigned)*15);
-        qsort(e, 15, sizeof(unsigned), compare );
-                
-        for (int i = 0; i < 15; ++i) { DEBUG(e[i]); DEBUG('-'); }
+        unsigned e[RANGE_REP_LENGTH];
+        memcpy(e, ranges, sizeof(unsigned) * RANGE_REP_LENGTH);
+
+        qsort(e, RANGE_REP_LENGTH, sizeof(unsigned), [](const void* a, const void* b) -> int { 
+          const unsigned int_a = * ( (unsigned*) a );
+          const unsigned int_b = * ( (unsigned*) b );
+          return (int_a > int_b) - (int_a < int_b);
+        });
+
+
+        sample_t samples[4];
+        size_t s = 0;
+        
+        for (int i = 0; i < RANGE_REP_LENGTH; ++i) { DEBUG(e[i]); DEBUG('-'); }
         DEBUG('\n');
-        const unsigned distance = e[7];
-        const sample_t sample = { rtc.getEpoch(), F("range"), distance / 10.0f };
-        sendSample(sample);
+        const unsigned distance = e[RANGE_REP_LENGTH % 2 ? (RANGE_REP_LENGTH / 2U) + 1 : RANGE_REP_LENGTH / 2U];
+        samples[s++] = { rtc.getEpoch(), F("range"), distance / 10.0f };
 
         float temp, hygro = 0.0;
         if (sensors.sampleAM2302(temp, hygro)) {
-          const sample_t sample1 = { rtc.getEpoch(), F("temp"), temp };
-          sendSample(sample1);
+          samples[s++] = { rtc.getEpoch(), F("temp"), temp };
           DEBUG(F("Temperature : ")); DEBUG(temp); DEBUG('\n');
           
-          const sample_t sample2 = { rtc.getEpoch(), F("hygro"), hygro };
-          sendSample(sample2);
+          samples[s++] = { rtc.getEpoch(), F("hygro"), hygro };
           DEBUG(F("Hygrometrie : ")); DEBUG(hygro); DEBUG('\n');
         }
         const float vBat = sensors.sampleBattery();
-        const sample_t sample3 = { rtc.getEpoch(), F("vbat"), vBat };
-        sendSample(sample3);
+        samples[s++] = { rtc.getEpoch(), F("vbat"), vBat };
         DEBUG("Batterie : "); DEBUG(vBat); DEBUG('\n');
+
+        return sendSamples(samples, s);
       }
     }  
     return true;
@@ -473,16 +478,41 @@ protected:
  * @return Le succès de la transmission, ou pas.
  */
   bool sendSample(const sample_t& sample) {
+    return sendSamples(&sample, 1);
+  }
+
+/**
+ * Transmet plusieurs échantillons sample_t sérialisés sous la forme JSON d'un tableau d'éléments.
+ * @param samples Les échantillons à traduire en JSON avant de les transmettre. Tout le tableau est transmis.
+ * @return Le succès de la transmission, ou pas.
+ */
+  template<size_t N>
+  bool sendSamples(const sample_t (&samples)[N]) {
+    return sendSamples(samples, N);
+  };
+  
+/**
+ * Transmet plusieurs échantillons sample_t sérialisés sous la forme JSON d'un tableau d'éléments.
+ * @param samples Les échantillons à traduire en JSON avant de les transmettre.
+ * @param n Le nombre d'échantillons du tableau à transmettre (premiers).
+ * @return Le succès de la transmission, ou pas.
+ */
+  bool sendSamples(const sample_t samples[], const size_t n) {
     const String path = String(F("/device/GSM-")) + imei + F("/samples");
 
-    String json(F("[{"));
-    json += F("\"epoch\":\"");
-    json += sample.epoch;
-    json += F("\",\"key\":\"");
-    json += sample.variable;
-    json += F("\",\"value\":\"");
-    json += String(sample.value);
-    json += F("\"}]");
+    String json('[');
+    for (size_t i = 0; i < n; ++i) {
+      const sample_t& sample = samples[i];
+      json += (i ? F(",{") : F("{"));
+      json += F("\"epoch\":\"");
+      json += sample.epoch;
+      json += F("\",\"key\":\"");
+      json += sample.variable;
+      json += F("\",\"value\":\"");
+      json += String(sample.value);
+      json += F("\"}");
+    }
+    json += ']';
     DEBUG(json); DEBUG('\n');
 
     const String serverName = String(F("api.picolimno.fr"));
@@ -524,7 +554,8 @@ protected:
     client.stop();
     return true;    
   }
-
+    
+  
 /**
  * Retourne la date et l'heure maintenues par la RTC locale.
  * 
