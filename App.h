@@ -45,8 +45,12 @@
 // pas de define : pas de mise à l'heure,
 // 0 : GSM,
 // 1 : NTP.
-
 #define GSM_NTP 1
+
+// Indique la méthode de transmission :
+// Si PETITES_TRAMES est defini : chaque variable est transmise séparément ;
+// Sinon : toutes les variables sont transmises dans une unique requête (array JSON).
+// #define PETITES_TRAMES
 
 /**
  * Classe principale qui implémente l'application.
@@ -249,28 +253,45 @@ public:
           return (int_a > int_b) - (int_a < int_b);
         });
 
-
         sample_t samples[4];
         size_t s = 0;
         
         for (int i = 0; i < RANGE_REP_LENGTH; ++i) { DEBUG(e[i]); DEBUG('-'); }
         DEBUG('\n');
         const unsigned distance = e[RANGE_REP_LENGTH % 2 ? (RANGE_REP_LENGTH / 2U) + 1 : RANGE_REP_LENGTH / 2U];
-        samples[s++] = { rtc.getEpoch(), F("range"), distance / 10.0f };
+        samples[s] = { rtc.getEpoch(), F("range"), distance / 10.0f };
+#ifdef PETITES_TRAMES
+        sendSample(samples[s]);
+#endif
+        ++s;
 
         float temp, hygro = 0.0;
         if (sensors.sampleAM2302(temp, hygro)) {
-          samples[s++] = { rtc.getEpoch(), F("temp"), temp };
+          samples[s] = { rtc.getEpoch(), F("temp"), temp };
+#ifdef PETITES_TRAMES
+          sendSample(samples[s]);
+#endif
+          ++s;
           DEBUG(F("Temperature : ")); DEBUG(temp); DEBUG('\n');
           
-          samples[s++] = { rtc.getEpoch(), F("hygro"), hygro };
+          samples[s] = { rtc.getEpoch(), F("hygro"), hygro };
+#ifdef PETITES_TRAMES
+          sendSample(samples[s]);
+#endif
+          ++s;
           DEBUG(F("Hygrometrie : ")); DEBUG(hygro); DEBUG('\n');
         }
         const float vBat = sensors.sampleBattery();
-        samples[s++] = { rtc.getEpoch(), F("vbat"), vBat };
+        samples[s] = { rtc.getEpoch(), F("vbat"), vBat };
+#ifdef PETITES_TRAMES
+        sendSample(samples[s]);
+#endif
+        ++s;
         DEBUG("Batterie : "); DEBUG(vBat); DEBUG('\n');
 
+#ifndef PETITES_TRAMES
         return sendSamples(samples, s);
+#endif
       }
     }  
     return true;
