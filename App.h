@@ -24,18 +24,15 @@
  */
 #pragma once
 
-// #include <MKRGSM.h>
 #include <RTCZero.h>
 #include <ctime>
 #include <cassert>
-// #include <algorithm> 
 
 #include "sensors.h"
 #include "parameters.h"
 
 #define TINY_GSM_MODEM_UBLOX
 #include <TinyGsmClient.h>
-
 #include <ArduinoHttpClient.h>
 
 // Temps en secondes entre deux mesures de distance
@@ -290,7 +287,7 @@ public:
         DEBUG("Batterie : "); DEBUG(vBat); DEBUG('\n');
 
 #ifndef PETITES_TRAMES
-        return sendSamples(samples, s);
+        sendSamples(samples, s);
 #endif
       }
     }  
@@ -445,13 +442,13 @@ protected:
   bool sendStatus(const String& aState) {
     const String path = String(F("/device/GSM-")) + imei + F("/status");
 
-    String payload(F("{\"timestamp\": \"")); 
-    payload += getTimestamp();
-    payload += F("\",\"status\":\"");
-    payload += aState;
-    payload += F("\",\"IP\":\"");
-    payload += modem.getLocalIP();
-    payload += F("\"}");
+    String json(F("{\"timestamp\": \"")); 
+    json += getTimestamp();
+    json += F("\",\"status\":\"");
+    json += aState;
+    json += F("\",\"IP\":\"");
+    json += modem.getLocalIP();
+    json += F("\"}");
 
     const String serverName = String(F("api.picolimno.fr"));
     const unsigned serverPort = 80;
@@ -463,21 +460,25 @@ protected:
     }
 
     HttpClient http = HttpClient(client, serverName, serverPort);
-    const int err = http.put(path, String(F("application/json")), payload);
-    if (err != 0) {
-      DEBUG(F("Error on PUT (")); DEBUG(err); DEBUG(F(")!\n"));
-      return false;
+    int status;
+    
+    for (int i = 0; i < 3; ++i) {
+      const int err = http.put(path, String(F("application/json")), json);
+      if (err != 0) {
+        DEBUG(F("Error on PUT (")); DEBUG(err); DEBUG(F(")!\n"));
+        break;
+      }
+      status = http.responseStatusCode();
+      if (status <= 0) {
+        DEBUG(F("Internal error on PUT (")); DEBUG(status); DEBUG(F(")!\n'"));
+        delay(500);
+        continue; // un autre essai!
+      } else {
+        DEBUG(F("HTTP Response : ")); DEBUG(status); DEBUG('\n');
+        break;
+      }
     }
-    const int status = http.responseStatusCode();
-    if (status <= 0) {
-      DEBUG(F("Internal error on PUT")); DEBUG(status); DEBUG('\n');
-      return false;
-    } else if (status < 200 && status >= 300) {
-      DEBUG(F("HTTP Response : ")); DEBUG(status); DEBUG('\n');
-      return false;
-    } else {
-      DEBUG(F("Success (")); DEBUG(status); DEBUG(F(")\n"));
-    }
+    if (status <= 0) return false;
 
     while (!http.endOfHeadersReached()) {
       if (http.headerAvailable()) {
@@ -546,22 +547,26 @@ protected:
     }
 
     HttpClient http = HttpClient(client, serverName, serverPort);
-    const int err = http.put(path, String(F("application/json")), json);
-    if (err != 0) {
-      DEBUG(F("Error on PUT (")); DEBUG(err); DEBUG(F(")!\n"));
-      return false;
+    int status;
+    
+    for (int i = 0; i < 3; ++i) {
+      const int err = http.put(path, String(F("application/json")), json);
+      if (err != 0) {
+        DEBUG(F("Error on PUT (")); DEBUG(err); DEBUG(F(")!\n"));
+        break;
+      }
+      status = http.responseStatusCode();
+      if (status <= 0) {
+        DEBUG(F("Internal error on PUT (")); DEBUG(status); DEBUG(F(")!\n'"));
+        delay(500);
+        continue; // un autre essai!
+      } else {
+        DEBUG(F("HTTP Response : ")); DEBUG(status); DEBUG('\n');
+        break;
+      }
     }
-    const int status = http.responseStatusCode();
-    if (status <= 0) {
-      DEBUG(F("Internal error on PUT")); DEBUG(status); DEBUG('\n');
-      return false;
-    } else if (status < 200 && status >= 300) {
-      DEBUG(F("HTTP Response : ")); DEBUG(status); DEBUG('\n');
-      return false;
-    } else {
-      DEBUG(F("Success (")); DEBUG(status); DEBUG(F(")\n"));
-    }
-
+    if (status <= 0) return false;
+    
     while (!http.endOfHeadersReached()) {
       if (http.headerAvailable()) {
         const String name = http.readHeaderName();
