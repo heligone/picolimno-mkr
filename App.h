@@ -152,7 +152,14 @@ public:
 #elif (GSM_NTP == 1)
 // Get Date NTP    
     DEBUG(F("Requesting NTP date... "));
-    const uint32_t epoch = getNTP();
+    uint32_t epoch;
+    for (int i = 0; i < 10; ++i) {
+      epoch = getNTP();
+      if (epoch > 0) {
+        delay(500);
+        break;
+      }
+    }
     struct tm *const stm = gmtime((long*)&epoch);
 
     if ((1900 + stm->tm_year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante avec année de compilation
