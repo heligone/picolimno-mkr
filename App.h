@@ -226,19 +226,24 @@ public:
       rtc.setAlarmSeconds(t % 60);
       rtc.setAlarmMinutes((t / 60) % 60);
 
-#define RANGE_SEQ_LENGTH 5
+#define RANGE_SEQ_LENGTH 25
       unsigned d[RANGE_SEQ_LENGTH];
+      byte n = 0;
       for (byte i = 0; i < RANGE_SEQ_LENGTH; ++i) {
-        d[i] = sensors.sampleRange();
+        const unsigned s = sensors.sampleRange();
+        if (s > 0) {
+          d[n++] = sensors.sampleRange();
+        }
       }
-      qsort(d, RANGE_SEQ_LENGTH, sizeof(unsigned), [](const void* a, const void* b) -> int { 
+      
+      qsort(d, n, sizeof(unsigned), [](const void* a, const void* b) -> int { 
         const unsigned int_a = * ( (unsigned*) a );
         const unsigned int_b = * ( (unsigned*) b );
         return (int_a > int_b) - (int_a < int_b);
       });
       
-      const unsigned distance = d[RANGE_SEQ_LENGTH % 2 ? (RANGE_SEQ_LENGTH / 2) + 1 : RANGE_SEQ_LENGTH / 2];
-      DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG('\n');
+      const unsigned distance = d[n % 2 ? (n / 2) + 1 : n / 2];
+      DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG(F(" - Ech. : ")); DEBUG(n); DEBUG('\n');
   
 #define RANGE_REP_LENGTH 15
       for (byte i = 0; i < RANGE_REP_LENGTH; ++i) {

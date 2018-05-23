@@ -72,7 +72,7 @@ public:
  * "To calculate the distance, use a scale factor of 58uS per cm." 
  * ou pas !!! je comprends pas, mais la mesure est correcte.
  * 
- * @return La distance mesurée exprimée en mm.
+ * @return La distance mesurée exprimée en mm ou 0 si la mesure est invalide (hors interval).
  */
   unsigned long sampleRange() const {
     digitalWrite(mbTriggerPin, HIGH);
@@ -82,7 +82,7 @@ public:
     const unsigned long start = millis();
     const unsigned long pulse = pulseIn(mbEchoPin, HIGH, 170000UL); // attendre env. 148 ms (mesure et calcul)
     while (millis() - start < 170) ;  // attendre en tout 166ms avant la fin de toute la transmission
-    return pulse;
+    return (pulse < 600) || (pulse > 9000) ? 0 : pulse; // Hors interval : retour 0 == mesure invalide
   }
 
 /**
