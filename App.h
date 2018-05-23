@@ -30,6 +30,7 @@
 
 #include "sensors.h"
 #include "parameters.h"
+#include "alert.h"
 
 #define TINY_GSM_MODEM_UBLOX
 #include <TinyGsmClient.h>
@@ -243,6 +244,10 @@ public:
       
       const unsigned distance = (n > 0 ? d[n % 2 ? (n / 2) + 1 : n / 2] : 0);
       DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG(F(" - Ech. : ")); DEBUG(n); DEBUG('\n');
+
+
+
+      
   
 // Toutes les 15 min et dans les 10 premières secondes seulement
       if ((minu % 15 == 0) && (sec < 10)) {
