@@ -36,8 +36,14 @@
 #include <TinyGsmClient.h>
 #include <ArduinoHttpClient.h>
 
-// Temps en secondes entre deux mesures de distance
-#define INTERVAL_MESURES 10
+// Temps en secondes entre deux mesures de distance.
+#define INTERVAL_MESURES (10)
+
+// Temps en seconde entre deux transmissions.
+#define INTERVAL_TRANSMISSION (1*60)
+
+// Nombre d'échantillons matériels pour faire un échantillon brut après médiane.
+#define RANGE_SEQ_LENGTH 25
 
 // Indique la méthode utilisée pour mettre le Pico à l'heure, ou rien :
 // pas de define : pas de mise à l'heure,
@@ -75,15 +81,26 @@ public:
  * @return boolean value to indicate if execution was right or not. A faulty exec. means the program can't continue and should be aborted.
  */
   bool setup() {
+    DEBUG(F("Configuration\n-------------\n"));
+    DEBUG(F("- Mesures toutes les ")); DEBUG(INTERVAL_MESURES); DEBUG(F("s ;\n"));
+    DEBUG(F("- Transmissions toutes les ")); DEBUG(INTERVAL_TRANSMISSION); DEBUG(F("s ;\n"));
+    DEBUG(F("- Nombre d'echantillons matériels par mesure ")); DEBUG(RANGE_SEQ_LENGTH); DEBUG(F(" ;\n"));
+    DEBUG(F("- Methode de reglage de l'heure ")); DEBUG(GSM_NTP ? F("NTP") : F("GSM")); DEBUG(F(" ;\n"));
+#ifdef PETITES_TRAMES
+    DEBUG(F("- Transmission des valeurs par trames distinctes (PETITES).\n"));
+#else
+    DEBUG(F("- Transmission des valeurs regroupees par trames (GRANDES).\n"));
+#endif
 
-// set serial baudrate
+// GSM Card
+// * set serial baudrate
     SerialGSM.begin(115200);
-// hard resert
+// * hard resert
     pinMode(GSM_RESETN, OUTPUT);
     digitalWrite(GSM_RESETN, HIGH);
     delay(100);
     digitalWrite(GSM_RESETN, LOW);
-
+// * Modem start
     modem.restart();
     const String info = modem.getModemInfo();
     DEBUG(F("TinyGSM using ")); DEBUG(info); DEBUG('\n');
@@ -187,9 +204,6 @@ public:
           
 //    pinMode(LED, OUTPUT);
 
-// Initiat. ranges data set    
-    for (byte i = 0; i < 15; ++i) ranges[i] = sensors.sampleRange();
-
 // Define next timer's interrupt
     DEBUG(F("Start timer.\n"));
     const byte sec = rtc.getSeconds();
@@ -226,13 +240,12 @@ public:
       rtc.setAlarmSeconds(t % 60);
       rtc.setAlarmMinutes((t / 60) % 60);
 
-#define RANGE_SEQ_LENGTH 25
       unsigned d[RANGE_SEQ_LENGTH];
       unsigned n = 0; // nb échantillons valides
       for (unsigned i = 0; i < RANGE_SEQ_LENGTH; ++i) {
         const unsigned s = sensors.sampleRange();
         if (s > 0) {
-          d[n++] = sensors.sampleRange();
+          d[n++] = s;
         }
       }
       
@@ -245,12 +258,17 @@ public:
       const unsigned distance = (n > 0 ? d[n % 2 ? (n / 2) + 1 : n / 2] : 0);
       DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG(F(" - Ech. : ")); DEBUG(n); DEBUG('\n');
 
+      if (alert1.test(distance / 10.0f)) {
+        const sample_t sample = { rtc.getEpoch(), F("alert1"), distance / 10.0f };
+        sendSample(sample);
+      }
 
+      if (alert2.test(distance / 10.0f)) {
+        const sample_t sample = { rtc.getEpoch(), F("alert2"), distance / 10.0f };
+        sendSample(sample);
+      }
 
-      
-  
-// Toutes les 15 min et dans les 10 premières secondes seulement
-      if ((minu % 15 == 0) && (sec < 10)) {
+      if ((t % INTERVAL_TRANSMISSION) < INTERVAL_MESURES) {
         sample_t samples[4];
         size_t s = 0;
         
@@ -307,7 +325,9 @@ protected:
     GPRS_APN(apn), 
     GPRS_LOGIN(login),
     GPRS_PASSWORD(password),
-    modem(SerialGSM)
+    modem(SerialGSM),
+    alert1(500, 10),
+    alert2(100, 10)
   {
   }
 
@@ -657,7 +677,7 @@ private:
     AM2302 = 0
   };
 
-  static const int QUEUE_DEPTH;
+//  static const int QUEUE_DEPTH;
 
 /**
  * Structure des éléments enregistrés dans la file d'attente des mesures.
@@ -668,13 +688,15 @@ private:
     float value;
   };
 
+  Alert<float> alert1, alert2;
+
 //  static 
 //  QueueArray<sample_t> queue;
 
   static volatile
   bool fIntTimer;
 
-  unsigned ranges[15];
+//  unsigned ranges[15];
 
 };
 
@@ -682,6 +704,6 @@ App* App::pApp;
 RTCZero App::rtc;
 // QueueArray<App::sample_t> App::queue;
 volatile bool App::fIntTimer;
-const int App::QUEUE_DEPTH = 10;
+//const int App::QUEUE_DEPTH = 10;
 
 
