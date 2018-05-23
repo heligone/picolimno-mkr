@@ -210,7 +210,6 @@ public:
  * @return boolean value to indicate if execution was right or not. A faulty exec. means the program can't continue and should be aborted.
  */
   bool loop() {
-    static byte nbEchant = 0;
 //    rtc.standbyMode();
     
 // Si on a détecté un changement de minute, on lance les mesures nécessaires
@@ -228,8 +227,8 @@ public:
 
 #define RANGE_SEQ_LENGTH 25
       unsigned d[RANGE_SEQ_LENGTH];
-      byte n = 0;
-      for (byte i = 0; i < RANGE_SEQ_LENGTH; ++i) {
+      unsigned n = 0; // nb échantillons valides
+      for (unsigned i = 0; i < RANGE_SEQ_LENGTH; ++i) {
         const unsigned s = sensors.sampleRange();
         if (s > 0) {
           d[n++] = sensors.sampleRange();
@@ -242,33 +241,15 @@ public:
         return (int_a > int_b) - (int_a < int_b);
       });
       
-      const unsigned distance = d[n % 2 ? (n / 2) + 1 : n / 2];
+      const unsigned distance = (n > 0 ? d[n % 2 ? (n / 2) + 1 : n / 2] : 0);
       DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG(F(" - Ech. : ")); DEBUG(n); DEBUG('\n');
   
-#define RANGE_REP_LENGTH 15
-      for (byte i = 0; i < RANGE_REP_LENGTH; ++i) {
-        ranges[i] = (i < (RANGE_REP_LENGTH - 1) ? ranges[i + 1] : distance);
-        DEBUG(ranges[i]); DEBUG('-');
-      }
-      DEBUG('\n');
-      nbEchant = (nbEchant + 1) % RANGE_REP_LENGTH;
-      if (!nbEchant) {
-        unsigned e[RANGE_REP_LENGTH];
-        memcpy(e, ranges, sizeof(unsigned) * RANGE_REP_LENGTH);
-
-        qsort(e, RANGE_REP_LENGTH, sizeof(unsigned), [](const void* a, const void* b) -> int { 
-          const unsigned int_a = * ( (unsigned*) a );
-          const unsigned int_b = * ( (unsigned*) b );
-          return (int_a > int_b) - (int_a < int_b);
-        });
-
+// Toutes les 15 min et dans les 10 premières secondes seulement
+      if ((minu % 15 == 0) && (sec < 10)) {
         sample_t samples[4];
         size_t s = 0;
         
-        for (int i = 0; i < RANGE_REP_LENGTH; ++i) { DEBUG(e[i]); DEBUG('-'); }
-        DEBUG('\n');
-        const unsigned distance = e[RANGE_REP_LENGTH % 2 ? (RANGE_REP_LENGTH / 2U) + 1 : RANGE_REP_LENGTH / 2U];
-        samples[s] = { rtc.getEpoch(), F("range"), distance / 10.0f };
+        samples[s] = { rtc.getEpoch(), F("range"), distance / 10.0f };  // Utilisation du dernier échantillon (valide).
 #ifdef PETITES_TRAMES
         sendSample(samples[s]);
 #endif
