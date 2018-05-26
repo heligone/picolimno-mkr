@@ -261,25 +261,32 @@ public:
       const unsigned distance = (n > 0 ? d[n / 2] : 0);
       DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG(F(" - Ech. : ")); DEBUG(n); DEBUG('\n');
 
-      if (alert1.test(distance / 10.0f)) {
-        const sample_t sample = { rtc.getEpoch(), F("alert1"), distance / 10.0f };
-        sendSample(sample);
+      if (distance > 0) {   // Pas d'alerte en cas de valeur à 0
+        if (alert1.test(distance / 10.0f)) {
+          const sample_t sample = { rtc.getEpoch(), F("alert1"), distance / 10.0f };
+          sendSample(sample);
+        }
+  
+        if (alert2.test(distance / 10.0f)) {
+          const sample_t sample = { rtc.getEpoch(), F("alert2"), distance / 10.0f };
+          sendSample(sample);
+        }
+      } else {  // Transmettre une trame d'erreur
+          const sample_t sample = { rtc.getEpoch(), F("invalide range"), 0};
+          sendSample(sample);
       }
-
-      if (alert2.test(distance / 10.0f)) {
-        const sample_t sample = { rtc.getEpoch(), F("alert2"), distance / 10.0f };
-        sendSample(sample);
-      }
-
+      
       if ((t % INTERVAL_TRANSMISSION) < INTERVAL_MESURES) {
         sample_t samples[4];
         size_t s = 0;
         
-        samples[s] = { rtc.getEpoch(), F("range"), distance / 10.0f };  // Utilisation du dernier échantillon (valide).
+        if (distance > 0) { // Ne pas transmettre de mesure invalide.
+          samples[s] = { rtc.getEpoch(), F("range"), distance / 10.0f };  // Utilisation du dernier échantillon (valide).
 #ifdef PETITES_TRAMES
-        sendSample(samples[s]);
+          sendSample(samples[s]);
 #endif
-        ++s;
+          ++s;
+        }
 
         float temp, hygro = 0.0;
         if (sensors.sampleAM2302(temp, hygro)) {
