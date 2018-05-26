@@ -240,22 +240,25 @@ public:
       rtc.setAlarmSeconds(t % 60);
       rtc.setAlarmMinutes((t / 60) % 60);
 
-      unsigned d[RANGE_SEQ_LENGTH];
+      unsigned d[RANGE_SEQ_LENGTH * 2];
       unsigned n = 0; // nb échantillons valides
-      for (unsigned i = 0; i < RANGE_SEQ_LENGTH; ++i) {
+      for (unsigned i = 0; i < RANGE_SEQ_LENGTH * 2; ++i) {
         const unsigned s = sensors.sampleRange();
         if (s > 0) {
           d[n++] = s;
+          if (n == RANGE_SEQ_LENGTH) break; // Objectif atteint
         }
       }
-      
-      qsort(d, n, sizeof(unsigned), [](const void* a, const void* b) -> int { 
-        const unsigned int_a = * ( (unsigned*) a );
-        const unsigned int_b = * ( (unsigned*) b );
-        return (int_a > int_b) - (int_a < int_b);
-      });
-      
-      const unsigned distance = (n > 0 ? d[n % 2 ? (n / 2) + 1 : n / 2] : 0);
+
+      if (n > 1) {
+        qsort(d, n, sizeof(unsigned), [](const void* a, const void* b) -> int { 
+          const unsigned int_a = * ( (unsigned*) a );
+          const unsigned int_b = * ( (unsigned*) b );
+          return (int_a > int_b) - (int_a < int_b);
+        });
+      }
+            
+      const unsigned distance = (n > 0 ? d[n / 2] : 0);
       DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG(F(" - Ech. : ")); DEBUG(n); DEBUG('\n');
 
       if (alert1.test(distance / 10.0f)) {
@@ -473,7 +476,7 @@ protected:
 
     TinyGsmClient client(modem);
     if (!client.connect(serverName.c_str(), serverPort)) {
-      DEBUG(F("No connection !"));
+      DEBUG(F("No connection in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F("!"));
       return false;
     }
 
@@ -560,7 +563,7 @@ protected:
 
     TinyGsmClient client(modem);;
     if (!client.connect(serverName.c_str(), serverPort)) {
-      DEBUG(F("No connection !"));
+      DEBUG(F("No connection in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F("!"));
       return false;
     }
 
