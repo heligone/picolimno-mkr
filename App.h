@@ -240,9 +240,9 @@ public:
       rtc.setAlarmSeconds(t % 60);
       rtc.setAlarmMinutes((t / 60) % 60);
 
-      unsigned d[RANGE_SEQ_LENGTH * 2];
+      unsigned d[RANGE_SEQ_LENGTH];
       unsigned n = 0; // nb échantillons valides
-      for (unsigned i = 0; i < RANGE_SEQ_LENGTH * 2; ++i) {
+      for (unsigned i = 0; i < RANGE_SEQ_LENGTH * 5; ++i) {
         const unsigned s = sensors.sampleRange();
         if (s > 0) {
           d[n++] = s;
