@@ -336,8 +336,8 @@ protected:
     GPRS_LOGIN(login),
     GPRS_PASSWORD(password),
     modem(SerialGSM),
-    alert1(500, 10),
-    alert2(100, 10)
+    alert1(150, 10), /*orange*/
+    alert2(80, 10) /*rouge*/
   {
   }
 

@@ -40,7 +40,7 @@ protected:
 public:
 /**
  * Constructeur de l'alerte.
- * Une alerte change d'état si la valeur dépasse le seuil + l'écart/2 ou si la valeur passe en dessous du seuil - écart / 2.
+ * Une alerte change d'état si la valeur passe en dessous du seuil ou si la valeur passe au dessus du (seuil + écart).
  * 
  * @param seuil Le seuil de l'alerte.
  * @param l'écart autour du seuil (hystérésis).
@@ -60,12 +60,12 @@ public:
  */
   bool test(const T& value) {
     if (fStatus) {  // true 
-      if (value < fSeuil - fEcart / 2) {
+      if (value < fSeuil ) {
         fStatus = false;
         return true; // changement
       }
     } else {
-      if (value > fSeuil + fEcart / 2) {
+      if (value > fSeuil + fEcart ) {
         fStatus = true;
         return true;
       }

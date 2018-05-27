@@ -25,7 +25,7 @@
 #define DEBUG_BUILD 1
 
 #ifdef DEBUG_BUILD
-#  define DEBUG(x) do { Serial.print(x); } while(0)
+#  define DEBUG(x) do { Serial.print(x); Serial1.print(x);  } while(0)
 #else
 #  define DEBUG(x) do {} while (0)
 #endif
@@ -45,8 +45,9 @@ App& app = App::getInstance(F(APN_NAME), F(APN_USERNAME), F(APN_PASSWORD));
 
 void setup() {
   Serial.begin(115200);
+  Serial1.begin(57600);
 //  while (!Serial) ;
-  delay(2000);
+  delay(5000);
 
   Serial.println(F(__FILE__));
   Serial.print(F("Compiled on ")); Serial.print(F(__DATE__)); 
