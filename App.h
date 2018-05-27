@@ -246,10 +246,12 @@ public:
         const unsigned s = sensors.sampleRange();
         if (s > 0) {
           d[n++] = s;
+          DEBUG(s);DEBUG(F("--"));
           if (n == RANGE_SEQ_LENGTH) break; // Objectif atteint
         }
       }
-
+      DEBUG('\n');
+      
       if (n > 1) {
         qsort(d, n, sizeof(unsigned), [](const void* a, const void* b) -> int { 
           const unsigned int_a = * ( (unsigned*) a );
