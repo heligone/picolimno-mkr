@@ -36,14 +36,16 @@
 #include <TinyGsmClient.h>
 #include <ArduinoHttpClient.h>
 
-// Temps en secondes entre deux mesures de distance.
+/// Temps en secondes entre deux mesures de distance.
 #define INTERVAL_MESURES (10)
 
-// Temps en seconde entre deux transmissions.
+/// Temps en seconde entre deux transmissions.
 #define INTERVAL_TRANSMISSION (1*60)
 
-// Nombre d'échantillons matériels pour faire un échantillon brut après médiane.
-#define RANGE_SEQ_LENGTH 25
+/// Nombre d'échantillons matériels nécessaires pour faire un échantillon brut après médiane (minimum sinon l'échantillon est invalide).
+#define RANGE_SEQ_MIN 10
+/// Nombre maximum de mesures matérielles pou obtenir le nombre d'échantillons matériels nécessaires.
+#define RANGE_SEQ_MAX 175
 
 // Indique la méthode utilisée pour mettre le Pico à l'heure, ou rien :
 // pas de define : pas de mise à l'heure,
@@ -84,7 +86,7 @@ public:
     DEBUG(F("Configuration\n-------------\n"));
     DEBUG(F("- Mesures toutes les ")); DEBUG(INTERVAL_MESURES); DEBUG(F("s ;\n"));
     DEBUG(F("- Transmissions toutes les ")); DEBUG(INTERVAL_TRANSMISSION); DEBUG(F("s ;\n"));
-    DEBUG(F("- Nombre d'echantillons matériels par mesure ")); DEBUG(RANGE_SEQ_LENGTH); DEBUG(F(" ;\n"));
+    DEBUG(F("- Nombre d'echantillons matériels par mesure ")); DEBUG(RANGE_SEQ_MIN); DEBUG(F(" pour ")); DEBUG(RANGE_SEQ_MAX); DEBUG(F(" tentatives ;\n"));
     DEBUG(F("- Methode de reglage de l'heure ")); DEBUG(GSM_NTP ? F("NTP") : F("GSM")); DEBUG(F(" ;\n"));
 #ifdef PETITES_TRAMES
     DEBUG(F("- Transmission des valeurs par trames distinctes (PETITES).\n"));
@@ -240,14 +242,14 @@ public:
       rtc.setAlarmSeconds(t % 60);
       rtc.setAlarmMinutes((t / 60) % 60);
 
-      unsigned d[RANGE_SEQ_LENGTH];
+      unsigned d[RANGE_SEQ_MIN];
       unsigned n = 0; // nb échantillons valides
-      for (unsigned i = 0; i < RANGE_SEQ_LENGTH * 5; ++i) {
+      for (unsigned i = 0; i < RANGE_SEQ_MAX; ++i) {
         const unsigned s = sensors.sampleRange();
         if (s > 0) {
           d[n++] = s;
-          DEBUG(s);DEBUG(F("--"));
-          if (n == RANGE_SEQ_LENGTH) break; // Objectif atteint
+          DEBUG(s); DEBUG(F("--"));
+          if (n >= RANGE_SEQ_MIN) break; // Objectif atteint
         }
       }
       DEBUG('\n');
@@ -331,15 +333,14 @@ protected:
  * @param password APN login's password as PROGMEM char*
  */
   App(const __FlashStringHelper apn[], const __FlashStringHelper login[], const __FlashStringHelper password[]) :
-    sensors(TRIGGER, ECHO, AM2302),
-    parameters(),
-//    http(F("api.picolimno.fr"), 443),
+    sensors(TRIGGER, ECHO, AM2302),   ///< Initialisation de capteurs (broches de connexion)
+    parameters(),                     ///< Initialisation des paramètres de fonctionnement du capteur
     GPRS_APN(apn), 
     GPRS_LOGIN(login),
     GPRS_PASSWORD(password),
-    modem(SerialGSM),
-    alert1(150, 10), /*orange*/
-    alert2(80, 10) /*rouge*/
+    modem(SerialGSM),                 ///< Initialisation de la carte modem GSM.
+    alert1(150, 10),                  ///< Initialisation de l'alerte Orange (seuil et hystérésis)
+    alert2(80, 10)                    ///< Initialisation de l'alerte Rouge  (seuil et hystérésis)
   {
   }
 
