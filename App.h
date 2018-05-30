@@ -108,40 +108,16 @@ public:
     DEBUG(F("TinyGSM using ")); DEBUG(info); DEBUG('\n');
 
 // Connection GSM & GPRS    
-    DEBUG(F("Setting up GSM connection... "));
-    int err;
-    for (byte i = 0; i < 10; ++i) {
-      err = modem.waitForNetwork();
-      if (!err) {
-        DEBUG(err);
-        DEBUG(' '); delay(500);
-      } else break;
-    }        
-    if (!err) {
-      DEBUG(F("Timeout! No GSM found!\n"));
+    DEBUG(F("Setting up GSM & GPRS connection... "));
+    if (!connectGSMGPRS()) {
+      DEBUG(F("Echec de connexion. Abandon !\n"));
       return false;
-    } else {
-      DEBUG(F("Connected.\n"));
     }
+    DEBUG('\n');
 
     DEBUG(F("Getting IMEI... "));
     imei = modem.getIMEI();
     DEBUG(F("DeviceID: GSM-")); DEBUG(imei); DEBUG('\n');
-
-    DEBUG(F("Setting up GPRS connection... "));
-    for (byte i = 0; i < 10; ++i) {
-      err = modem.gprsConnect(String(GPRS_APN).c_str(), String(GPRS_LOGIN).c_str(), String(GPRS_PASSWORD).c_str());
-      if (!err) {
-        DEBUG(err); DEBUG(' ');
-        delay(500);
-      } else break;
-    }        
-    if (!err) {
-      DEBUG(F("Timeout! No GPRS network found!\n"));
-      return false;
-    } else {
-      DEBUG(F("Connected.\n"));
-    }
 
 // Mise à l'heure
     rtc.begin();
@@ -196,7 +172,14 @@ public:
 
 // Sending Status
     DEBUG(F("Sending Status Starting\n"));
-    sendStatus(F("Starting"));
+    if (!sendStatus(F("Starting"))) {
+      if (!connectGSMGPRS()) {
+        DEBUG(F("Echec de connexion. Poursuite !\n"));
+      }
+      if (!sendStatus(F("Starting"))) {
+        DEBUG(F("Echec de retransmission. Poursuite !\n"));
+      }    
+    }
 
 // Get parameters    
 //    DEBUG(F("Requesting parameters")); DEBUG('\n');
@@ -268,16 +251,37 @@ public:
       if (distance > 0) {   // Pas d'alerte en cas de valeur à 0
         if (alert1.test(distance / 10.0f)) {
           const sample_t sample = { rtc.getEpoch(), F("alert1"), distance / 10.0f };
-          sendSample(sample);
+          if (!sendSample(sample)) {
+            if (!connectGSMGPRS()) {
+              DEBUG(F("Echec de connexion. Poursuite !\n"));
+            }
+            if (!sendSample(sample)) {
+              DEBUG(F("Echec de retransmission. Poursuite !\n"));
+            }    
+          }
         }
   
         if (alert2.test(distance / 10.0f)) {
           const sample_t sample = { rtc.getEpoch(), F("alert2"), distance / 10.0f };
-          sendSample(sample);
+          if (!sendSample(sample)) {
+            if (!connectGSMGPRS()) {
+              DEBUG(F("Echec de connexion. Poursuite !\n"));
+            }
+            if (!sendSample(sample)) {
+              DEBUG(F("Echec de retransmission. Poursuite !\n"));
+            }    
+          }
         }
       } else {  // Transmettre une trame d'erreur
           const sample_t sample = { rtc.getEpoch(), F("invalide range"), 0};
-          sendSample(sample);
+          if (!sendSample(sample)) {
+            if (!connectGSMGPRS()) {
+              DEBUG(F("Echec de connexion. Poursuite !\n"));
+            }
+            if (!sendSample(sample)) {
+              DEBUG(F("Echec de retransmission. Poursuite !\n"));
+            }    
+          }
       }
       
       if ((t % INTERVAL_TRANSMISSION) < INTERVAL_MESURES) {
@@ -287,7 +291,14 @@ public:
         if (distance > 0) { // Ne pas transmettre de mesure invalide.
           samples[s] = { rtc.getEpoch(), F("range"), distance / 10.0f };  // Utilisation du dernier échantillon (valide).
 #ifdef PETITES_TRAMES
-          sendSample(samples[s]);
+          if (!sendSample(samples[s])) {
+            if (!connectGSMGPRS()) {
+              DEBUG(F("Echec de connexion. Poursuite !\n"));
+            }
+            if (!sendSample(samples[s])) {
+              DEBUG(F("Echec de retransmission. Poursuite !\n"));
+            }    
+          }
 #endif
           ++s;
         }
@@ -296,14 +307,28 @@ public:
         if (sensors.sampleAM2302(temp, hygro)) {
           samples[s] = { rtc.getEpoch(), F("temp"), temp };
 #ifdef PETITES_TRAMES
-          sendSample(samples[s]);
+          if (!sendSample(samples[s])) {
+            if (!connectGSMGPRS()) {
+              DEBUG(F("Echec de connexion. Poursuite !\n"));
+            }
+            if (!sendSample(samples[s])) {
+              DEBUG(F("Echec de retransmission. Poursuite !\n"));
+            }    
+          }
 #endif
           ++s;
           DEBUG(F("Temperature : ")); DEBUG(temp); DEBUG('\n');
           
           samples[s] = { rtc.getEpoch(), F("hygro"), hygro };
 #ifdef PETITES_TRAMES
-          sendSample(samples[s]);
+          if (!sendSample(samples[s])) {
+            if (!connectGSMGPRS()) {
+              DEBUG(F("Echec de connexion. Poursuite !\n"));
+            }
+            if (!sendSample(samples[s])) {
+              DEBUG(F("Echec de retransmission. Poursuite !\n"));
+            }    
+          }
 #endif
           ++s;
           DEBUG(F("Hygrometrie : ")); DEBUG(hygro); DEBUG('\n');
@@ -311,13 +336,27 @@ public:
         const float vBat = sensors.sampleBattery();
         samples[s] = { rtc.getEpoch(), F("vbat"), vBat };
 #ifdef PETITES_TRAMES
-        sendSample(samples[s]);
+          if (!sendSample(samples[s])) {
+            if (!connectGSMGPRS()) {
+              DEBUG(F("Echec de connexion. Poursuite !\n"));
+            }
+            if (!sendSample(samples[s])) {
+              DEBUG(F("Echec de retransmission. Poursuite !\n"));
+            }    
+          }
 #endif
         ++s;
         DEBUG("Batterie : "); DEBUG(vBat); DEBUG('\n');
 
 #ifndef PETITES_TRAMES
-        sendSamples(samples, s);
+        if (!sendSamples(samples, s)) {
+          if (!connectGSMGPRS()) {
+            DEBUG(F("Echec de connexion. Poursuite !\n"));
+          }
+          if (!sendSamples(samples, s)) {
+            DEBUG(F("Echec de retransmission. Poursuite !\n"));
+          }    
+        }
 #endif
       }
     }  
@@ -342,6 +381,41 @@ protected:
     alert1(150, 10),                  ///< Initialisation de l'alerte Orange (seuil et hystérésis)
     alert2(80, 10)                    ///< Initialisation de l'alerte Rouge  (seuil et hystérésis)
   {
+  }
+
+/**
+ * Connecte ou reconnecte le GSM et le GPRS selon les besoins.
+ * 
+ * @param retry Nombre de réessais pour obtenir les 2 connexions successives, 10 par défaut.
+ * @return L'état de la connexion, true si ok, false en cas d'erreur.
+ */
+  bool connectGSMGPRS(const byte retry = 10) {
+    int err;
+    for (byte i = 0; i < retry; ++i) {
+      err = modem.waitForNetwork();
+      if (!err) {
+        DEBUG(err); DEBUG(' ');
+        delay(500);
+      } else break;
+    }
+    if (!err) {
+      DEBUG(F("Timeout! No GSM found!\n"));
+      return false;
+    }
+
+    for (byte i = 0; i < retry; ++i) {
+      err = modem.gprsConnect(String(GPRS_APN).c_str(), String(GPRS_LOGIN).c_str(), String(GPRS_PASSWORD).c_str());
+      if (!err) {
+        DEBUG(err); DEBUG(' ');
+        delay(500);
+      } else break;
+    }
+    if (!err) {
+      DEBUG(F("Timeout! No GPRS network found!\n"));
+      return false;
+    }
+
+    return true;  // Connexion avec succès
   }
 
 /**
