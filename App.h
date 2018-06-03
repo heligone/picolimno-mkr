@@ -121,6 +121,12 @@ public:
     imei = modem.getIMEI();
     DEBUG(F("DeviceID: GSM-")); DEBUG(imei); DEBUG('\n');
 
+// Get Parameters
+    DEBUG(F("Get parameters..."));
+    const bool ok = getParameters();
+    DEBUG(ok);
+    DEBUG('\n');
+
 // Mise à l'heure
     rtc.begin();
 #if (GSM_NTP == 0)
@@ -380,6 +386,8 @@ protected:
     GPRS_LOGIN(login),
     GPRS_PASSWORD(password),
     modem(SerialGSM),                 ///< Initialisation de la carte modem GSM.
+    serverName(F("api.picolimno.fr")),
+    serverPort(80),
     alert1(150, 10),                  ///< Initialisation de l'alerte Orange (seuil et hystérésis)
     alert2(80, 10)                    ///< Initialisation de l'alerte Rouge  (seuil et hystérésis)
   {
@@ -503,28 +511,6 @@ protected:
       DEBUG("NTP no response!");
       return 0;
     }
-        
-/*    
-    Udp.begin(2390); // listening 
-
-// Résoudre fr.pool.ntp.org ou utiliser une IP  
-    const IPAddress timeServer(195,154,107,205);
-
-    Udp.beginPacket(timeServer, 123);
-    Udp.write((const char*)&packetBuffer, sizeof(packetBuffer));
-    Udp.endPacket();
-
-    unsigned long start = millis();
-    do {
-      if ( Udp.parsePacket() ) {
-        Udp.read((char*)&packetBuffer, sizeof(packetBuffer));
-        return ((packetBuffer.txTm_s[0] * 0x100UL + packetBuffer.txTm_s[1]) * 0x100UL + packetBuffer.txTm_s[2]) * 0x100UL + packetBuffer.txTm_s[3] - 2208988800UL;
-      } else {
-        DEBUG('.');
-        delay(500);
-      }
-    } while (millis() - start < 30000UL);
-*/
     return 0;
   };
 
@@ -556,9 +542,6 @@ protected:
     json += F("\",\"IP\":\"");
     json += modem.getLocalIP();
     json += F("\"}");
-
-    const String serverName = String(F("api.picolimno.fr"));
-    const unsigned serverPort = 80;
 
     TinyGsmClient client(modem);
     if (!client.connect(serverName.c_str(), serverPort)) {
@@ -644,9 +627,6 @@ protected:
     json += ']';
     DEBUG(json); DEBUG('\n');
 
-    const String serverName = String(F("api.picolimno.fr"));
-    const unsigned serverPort = 80;
-
     TinyGsmClient client(modem);;
     if (!client.connect(serverName.c_str(), serverPort)) {
       DEBUG(F("No connection in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F("!"));
@@ -725,19 +705,60 @@ protected:
  * 
  * @return Une chaîne JSON contenant chaque paramètre et sa valeur.
  */
- /*
-  String getParameters() {
+  bool getParameters() {
     const String path = String(F("/device/GSM-")) + imei + F("/parameters");
-    String response;
-    if (http.get(path, response)) {
-      Serial.println(response);
-      return response;
-    } else {
-      Serial.println(F("Erreur de GET"));
-      return String("");
+
+    TinyGsmClient client(modem);
+    if (!client.connect(serverName.c_str(), serverPort)) {
+      DEBUG(F("No connection in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F("!"));
+      return false;
     }
+
+    HttpClient http = HttpClient(client, serverName, serverPort);
+    int status;
+    
+    for (int i = 0; i < 3; ++i) {
+      const int err = http.get(path);
+      if (err != 0) {
+        DEBUG(F("Error on GET (")); DEBUG(err); DEBUG(F(")!\n"));
+        break;
+      }
+      status = http.responseStatusCode();
+      if (status <= 0) {
+        DEBUG(F("Internal error on GET (")); DEBUG(status); DEBUG(F(")!\n'"));
+        delay(500);
+        continue; // un autre essai!
+      } else {
+        DEBUG(F("HTTP Response : ")); DEBUG(status); DEBUG('\n');
+        break;
+      }
+    }
+    if (status <= 0) return false;
+
+    while (!http.endOfHeadersReached()) {
+      if (http.headerAvailable()) {
+        const String name = http.readHeaderName();
+        const String value = http.readHeaderValue();
+        DEBUG(F("Header ")); DEBUG(name); DEBUG(':'); DEBUG(value); DEBUG('\n');
+      }
+    }
+    const String body = http.responseBody();
+    DEBUG(F("Body: ")); DEBUG(body); DEBUG('\n');
+    client.stop();
+
+    StaticJsonBuffer<1000> jsonBuffer;
+    const JsonObject& root = jsonBuffer.parseObject(body);
+
+    parameters.limit1() = root.get<float>("limit1");
+/*
+    parameters["hyst1"] = root.get<float>("hyst1");
+    parameters["limit2"] = root.get<float>("limit2");
+    parameters["hyst2"] = root.get<float>("hyst2");
+    parameters["startTime"] = root.get<byte>("startTime");
+    parameters["stopTime"] = root.get<byte>("stopTime");
+*/    
+    return true;
   }
-*/  
  
 private:
   static App* pApp;
@@ -751,10 +772,9 @@ private:
   const __FlashStringHelper* GPRS_PASSWORD;
 
   TinyGsm modem;
-  
-//  GPRS gprs;
-//  GSM gsmAccess;
-
+  const String serverName;
+  const unsigned serverPort;
+      
   static RTCZero rtc;
 
   String imei;
@@ -766,8 +786,6 @@ private:
     AM2302 = 0
   };
 
-//  static const int QUEUE_DEPTH;
-
 /**
  * Structure des éléments enregistrés dans la file d'attente des mesures.
  */
@@ -778,9 +796,6 @@ private:
   };
 
   Alert<float> alert1, alert2;
-
-//  static 
-//  QueueArray<sample_t> queue;
 
   static volatile
   bool fIntTimer;

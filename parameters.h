@@ -48,9 +48,15 @@ public:
     live(hardCoded) {
   }
 
+/*
   template<typename T>
   const T& operator[](const String& aName) const {
     
+  }
+*/
+
+  float& limit1() {
+    return live.limit1;
   }
 
 };
