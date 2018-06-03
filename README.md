@@ -34,6 +34,8 @@ Après avoir cloner le répertoire, penser à ajouter le fichier
   <code>Croquis > Inclure une biliothèque > MKRGSM</code> ;
 * RTCZero :
   <code>Croquis > Inclure une biliothèque > RTCZero</code>
+* ArduinoJson (https://github.com/bblanchon/ArduinoJson) :
+  <code>Croquis > Inclure une biliothèque > Gérer les biliothèques</code> ; Ajouter "ArduinoJSON" dans le filtre et cliquer sur Installer.
 
 ## Matériel
 Le montage est simple, il consiste simplement à connecter les 3 périphériques

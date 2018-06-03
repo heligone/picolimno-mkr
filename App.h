@@ -24,9 +24,11 @@
  */
 #pragma once
 
+
 #include <RTCZero.h>
 #include <ctime>
 #include <cassert>
+#include <ArduinoJson.h>
 
 #include "sensors.h"
 #include "parameters.h"
