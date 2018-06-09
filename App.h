@@ -28,10 +28,12 @@
 #include <RTCZero.h>
 #include <ctime>
 #include <cassert>
+
+/// @warning
+/// ATTENTION FONCTIONNE SEULEMENT AVEC LA v5.13.1 (un problème sur le 5.13.2 que je n'ai pas investigué)
 #include <ArduinoJson.h>
 
 #include "sensors.h"
-#include "parameters.h"
 #include "alert.h"
 
 #define TINY_GSM_MODEM_UBLOX
@@ -225,14 +227,21 @@ public:
       DEBUG(F("Wakeup @ "));
       DEBUG(getTimestamp());
       DEBUG("\n");
-// Calcul de la prochaine interruption
+
       const byte sec = rtc.getSeconds();
       const byte minu = rtc.getMinutes();
+      const byte heure = rtc.getHours();
+
+      if ((startTime > 0) && (heure < startTime)) return true;      // Pas encore l'heure (veille)
+      if ((stopTime > 0) && (heure >= stopTime)) return true;       // Trop tard (veille)
+      
+// Calcul de la prochaine interruption
       const unsigned t = minu * 60 + sec + INTERVAL_MESURES - 1;
       App::fIntTimer = false;
       rtc.setAlarmSeconds(t % 60);
       rtc.setAlarmMinutes((t / 60) % 60);
 
+// Mesure de distance
       unsigned d[RANGE_SEQ_MIN];
       unsigned n = 0; // nb échantillons valides
       for (unsigned i = 0; i < RANGE_SEQ_MAX; ++i) {
@@ -253,11 +262,11 @@ public:
         });
       }
             
-      const unsigned distance = (n > 0 ? d[n / 2] : 0);
+      const unsigned distance = (n >= RANGE_SEQ_MIN ? d[n / 2] : 0);
       DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG(F(" - Ech. : ")); DEBUG(n); DEBUG('\n');
 
       if (distance > 0) {   // Pas d'alerte en cas de valeur à 0
-        if (alert1.test(distance / 10.0f)) {
+        if (alert1.enabled() && alert1.test(distance / 10.0f)) {    // Alerte activée et dépassement de seuil (montant ou descendant)
           const sample_t sample = { rtc.getEpoch(), F("alert1"), distance / 10.0f };
           if (!sendSample(sample)) {
             if (!connectGSMGPRS()) {
@@ -269,7 +278,7 @@ public:
           }
         }
   
-        if (alert2.test(distance / 10.0f)) {
+        if (alert2.enabled() && alert2.test(distance / 10.0f)) {    // Alerte activée et dépassement de seuil (montant ou descendant)
           const sample_t sample = { rtc.getEpoch(), F("alert2"), distance / 10.0f };
           if (!sendSample(sample)) {
             if (!connectGSMGPRS()) {
@@ -366,6 +375,11 @@ public:
           }    
         }
 #endif
+// Get Parameters
+        DEBUG(F("Get parameters..."));
+        const bool ok = getParameters();
+        DEBUG(ok);
+        DEBUG('\n');
       }
     }  
     return true;
@@ -381,15 +395,16 @@ protected:
  */
   App(const __FlashStringHelper apn[], const __FlashStringHelper login[], const __FlashStringHelper password[]) :
     sensors(TRIGGER, ECHO, AM2302),   ///< Initialisation de capteurs (broches de connexion)
-    parameters(),                     ///< Initialisation des paramètres de fonctionnement du capteur
     GPRS_APN(apn), 
     GPRS_LOGIN(login),
     GPRS_PASSWORD(password),
     modem(SerialGSM),                 ///< Initialisation de la carte modem GSM.
     serverName(F("api.picolimno.fr")),
     serverPort(80),
-    alert1(150, 10),                  ///< Initialisation de l'alerte Orange (seuil et hystérésis)
-    alert2(80, 10)                    ///< Initialisation de l'alerte Rouge  (seuil et hystérésis)
+    alert1(),                         ///< Initialisation de l'alerte Orange (seuil et hystérésis)
+    alert2(),                         ///< Initialisation de l'alerte Rouge  (seuil et hystérésis)
+    startTime(0),                     ///< Heure de démarrage des mesures (HH) 
+    stopTime(0)                       ///< Heure de fin des mesures (HH)
   {
   }
 
@@ -749,14 +764,16 @@ protected:
     StaticJsonBuffer<1000> jsonBuffer;
     const JsonObject& root = jsonBuffer.parseObject(body);
 
-    parameters.limit1() = root.get<float>("limit1");
-/*
-    parameters["hyst1"] = root.get<float>("hyst1");
-    parameters["limit2"] = root.get<float>("limit2");
-    parameters["hyst2"] = root.get<float>("hyst2");
-    parameters["startTime"] = root.get<byte>("startTime");
-    parameters["stopTime"] = root.get<byte>("stopTime");
-*/    
+    if (root.containsKey("limit1") && root.containsKey("hyst1")) {
+      alert1 = Alert(root["limit1"], root["hyst1"]);
+    }
+    if (root.containsKey("limit2") && root.containsKey("hyst2")) {
+      alert2 = Alert(root["limit2"], root["hyst2"]);
+    }
+
+    startTime = root["start"];
+    stopTime = root["stop"];
+
     return true;
   }
  
@@ -764,8 +781,6 @@ private:
   static App* pApp;
 
   Sensors sensors;
-  Parameters parameters;
-//  Http http;
 
   const __FlashStringHelper* GPRS_APN;
   const __FlashStringHelper* GPRS_LOGIN;
@@ -795,12 +810,12 @@ private:
     float value;
   };
 
-  Alert<float> alert1, alert2;
+// Parameters
+  Alert alert1, alert2;
+  byte startTime, stopTime;
 
   static volatile
   bool fIntTimer;
-
-//  unsigned ranges[15];
 
 };
 

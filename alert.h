@@ -25,12 +25,11 @@
 
 #pragma once
 
-template<typename T>
 class Alert {
 
 private:
-  const T fSeuil;
-  const T fEcart;
+  float fSeuil;
+  float fEcart;
 
   bool fStatus;
   
@@ -42,14 +41,16 @@ public:
  * Constructeur de l'alerte.
  * Une alerte change d'état si la valeur passe en dessous du seuil ou si la valeur passe au dessus du (seuil + écart).
  * 
- * @param seuil Le seuil de l'alerte.
- * @param l'écart autour du seuil (hystérésis).
+ * @param seuil Le seuil de l'alerte (defaut 0).
+ * @param l'écart autour du seuil (hystérésis), (defaut 0).
  */
-  Alert(const T& seuil, const T& ecart) :
+  Alert(const float& seuil = 0, const float& ecart = 0) :
     fSeuil(seuil),
     fEcart(ecart),
     fStatus(false)
   {}
+
+  Alert& operator=(const Alert& aAlert) = default;
 
 /**
  * Indique si l'alerte a changé d'état.
@@ -58,7 +59,7 @@ public:
  * @param T Une référence de nouvelle valeur à tester.
  * @return true si l'état de l'alerte a changé, false sinon.
  */
-  bool test(const T& value) {
+  bool test(const float& value) {
     if (fStatus) {  // true 
       if (value < fSeuil ) {
         fStatus = false;
@@ -81,6 +82,10 @@ public:
  */
   bool status() const {
     return fStatus;
+  }
+
+  bool enabled() const {
+    return (fSeuil == 0 && fEcart == 0);
   }
   
   
