@@ -232,15 +232,16 @@ public:
       const byte minu = rtc.getMinutes();
       const byte heure = rtc.getHours();
 
-      if ((startTime > 0) && (heure < startTime)) return true;      // Pas encore l'heure (veille)
-      if ((stopTime > 0) && (heure >= stopTime)) return true;       // Trop tard (veille)
-      
 // Calcul de la prochaine interruption
       const unsigned t = minu * 60 + sec + INTERVAL_MESURES - 1;
       App::fIntTimer = false;
       rtc.setAlarmSeconds(t % 60);
       rtc.setAlarmMinutes((t / 60) % 60);
 
+// Vérification de la période de veille
+      if ((startTime > 0) && (heure < startTime)) return true;      // Pas encore l'heure (veille)
+      if ((stopTime > 0) && (heure >= stopTime)) return true;       // Trop tard (veille)
+      
 // Mesure de distance
       unsigned d[RANGE_SEQ_MIN];
       unsigned n = 0; // nb échantillons valides
@@ -761,7 +762,7 @@ protected:
     DEBUG(F("Body: ")); DEBUG(body); DEBUG('\n');
     client.stop();
 
-    StaticJsonBuffer<1000> jsonBuffer;
+    DynamicJsonBuffer jsonBuffer(JSON_OBJECT_SIZE(6) + 60);
     const JsonObject& root = jsonBuffer.parseObject(body);
 
     if (root.containsKey("limit1") && root.containsKey("hyst1")) {
