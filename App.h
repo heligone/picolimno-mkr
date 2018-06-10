@@ -707,7 +707,7 @@ protected:
           struct tm tm;
           strptime(value.c_str(),"%a, %e %h %Y %H:%M:%S %z",&tm);
           rtc.setTime(tm.tm_hour, tm.tm_min, tm.tm_sec);
-          rtc.setDate(tm.tm_mday, tm.tm_mday + 1, tm.tm_year % 100);
+          rtc.setDate(tm.tm_mday, tm.tm_mon + 1, tm.tm_year % 100);
         }
       }
     }
