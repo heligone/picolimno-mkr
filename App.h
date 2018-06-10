@@ -41,10 +41,10 @@
 #include <ArduinoHttpClient.h>
 
 /// Temps en secondes entre deux mesures de distance.
-#define INTERVAL_MESURES (10)
+#define INTERVAL_MESURES (60)
 
 /// Temps en seconde entre deux transmissions.
-#define INTERVAL_TRANSMISSION (1*60)
+#define INTERVAL_TRANSMISSION (15*60)
 
 /// Nombre d'échantillons matériels nécessaires pour faire un échantillon brut après médiane (minimum sinon l'échantillon est invalide).
 #define RANGE_SEQ_MIN 10
@@ -233,7 +233,7 @@ public:
       const byte heure = rtc.getHours();
 
 // Calcul de la prochaine interruption
-      const unsigned t = minu * 60 + sec + INTERVAL_MESURES - 1;
+      const unsigned t = ((minu * 60 + sec) / INTERVAL_MESURES + 1) * INTERVAL_MESURES + 3599;
       App::fIntTimer = false;
       rtc.setAlarmSeconds(t % 60);
       rtc.setAlarmMinutes((t / 60) % 60);
