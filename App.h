@@ -123,62 +123,13 @@ public:
     imei = modem.getIMEI();
     DEBUG(F("DeviceID: GSM-")); DEBUG(imei); DEBUG('\n');
 
-// Get Parameters
+    rtc.begin();
+
+// Get Parameters & datetime
     DEBUG(F("Get parameters..."));
     const bool ok = getParameters();
     DEBUG(ok);
     DEBUG('\n');
-
-// Mise à l'heure
-    rtc.begin();
-#if (GSM_NTP == 0)
-// Get GSM Network date
-    DEBUG(F("Requesting GSM date... "));
-
-// Si le compilateur plante sur la ligne suivante, il faudrait mettre à jour le source de TinyGSM sur la base de cette proposition :
-// https://github.com/vshymanskyy/TinyGSM/pull/165/commits/712eaea3eb1f6b8c55747f0863a8ee3478991318    
-    const String dt = modem.getGSMDateTime(DATE_FULL);
-    DEBUG(dt); DEBUG('\n');
-
-    const unsigned year = dt.substring(0,2).toInt();
-    const byte mon = dt.substring(3,5).toInt();
-    const byte mday = dt.substring(6,8).toInt();
-    if ((2000 + year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante avec année de compilation
-      const byte hour = dt.substring(9,11).toInt();
-      const byte min = dt.substring(12,14).toInt();
-      const byte sec = dt.substring(15,17).toInt();
-      rtc.setTime((hour + 22) % 24, min, sec);
-      rtc.setDate(mday, mon, year);
-      DEBUG(getTimestamp());
-      DEBUG(F(" (UTC) - Succeded.\n"));
-    } else {
-      DEBUG(F("Warning no GSM Network date!\n"));
-      return false;
-    }
-#elif (GSM_NTP == 1)
-// Get Date NTP    
-    DEBUG(F("Requesting NTP date... "));
-    uint32_t epoch;
-    for (int i = 0; i < 10; ++i) {
-      epoch = getNTP();
-      if (epoch > 0) {
-        delay(500);
-        break;
-      }
-    }
-    struct tm *const stm = gmtime((long*)&epoch);
-
-    if ((1900 + stm->tm_year) >= ((__DATE__[7] - 0x30) * 1000 + (__DATE__[8] - 0x30) * 100 + (__DATE__[9] - 0x30) * 10 + (__DATE__[10] - 0x30))) { // année cohérante avec année de compilation
-      rtc.setTime(stm->tm_hour, stm->tm_min, stm->tm_sec);
-      rtc.setDate(stm->tm_mday, stm->tm_mon + 1, stm->tm_year % 100);
-      DEBUG(stm->tm_mday); DEBUG('/'); DEBUG(stm->tm_mon); DEBUG('/'); DEBUG(stm->tm_year); DEBUG('\n');
-      DEBUG(getTimestamp());
-      DEBUG(F(" (UTC) - Succeded.\n"));
-    } else {
-      DEBUG(F("Warning no NTP date!\n"));
-      return false;
-    }
-#endif    
 
 // Sending Status
     DEBUG(F("Sending Status Starting\n"));
@@ -191,13 +142,8 @@ public:
       }    
     }
 
-// Get parameters    
-//    DEBUG(F("Requesting parameters")); DEBUG('\n');
-//    const String s = getParameters();
-
+// Start all sensors (init...)
     if (!sensors.begin()) return false;
-          
-//    pinMode(LED, OUTPUT);
 
 // Define next timer's interrupt
     DEBUG(F("Start timer.\n"));
@@ -756,8 +702,16 @@ protected:
         const String name = http.readHeaderName();
         const String value = http.readHeaderValue();
         DEBUG(F("Header ")); DEBUG(name); DEBUG(':'); DEBUG(value); DEBUG('\n');
+
+        if (name.equalsIgnoreCase(F("Date"))) {
+          struct tm tm;
+          strptime(value.c_str(),"%a, %e %h %Y %H:%M:%S %z",&tm);
+          rtc.setTime(tm.tm_hour, tm.tm_min, tm.tm_sec);
+          rtc.setDate(tm.tm_mday, tm.tm_mday + 1, tm.tm_year % 100);
+        }
       }
     }
+    
     const String body = http.responseBody();
     DEBUG(F("Body: ")); DEBUG(body); DEBUG('\n');
     client.stop();
