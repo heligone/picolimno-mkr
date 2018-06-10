@@ -719,11 +719,11 @@ protected:
     DynamicJsonBuffer jsonBuffer(JSON_OBJECT_SIZE(6) + 60);
     const JsonObject& root = jsonBuffer.parseObject(body);
 
-    if (root.containsKey("limit1") && root.containsKey("hyst1")) {
-      alert1 = Alert(root["limit1"], root["hyst1"]);
+    if (root.containsKey("limit1R") && root.containsKey("hyst1R")) {
+      alert1 = Alert(root["limit1R"], root["hyst1R"]);
     }
-    if (root.containsKey("limit2") && root.containsKey("hyst2")) {
-      alert2 = Alert(root["limit2"], root["hyst2"]);
+    if (root.containsKey("limit2O") && root.containsKey("hyst2O")) {
+      alert2 = Alert(root["limit2O"], root["hyst2O"]);
     }
 
     startTime = root["start"];
