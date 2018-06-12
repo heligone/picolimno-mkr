@@ -114,8 +114,8 @@ public:
 // Connection GSM & GPRS    
     DEBUG(F("Setting up GSM & GPRS connection... "));
     if (!connectGSMGPRS()) {
-      DEBUG(F("Echec de connexion. Abandon !\n"));
-      return false;
+      DEBUG(F("Echec de connexion. Poursuite !\n"));
+      return true;
     }
     DEBUG('\n');
 
@@ -348,8 +348,8 @@ protected:
     modem(SerialGSM),                 ///< Initialisation de la carte modem GSM.
     serverName(F("api.picolimno.fr")),
     serverPort(80),
-    alert1(),                         ///< Initialisation de l'alerte Orange (seuil et hystérésis)
-    alert2(),                         ///< Initialisation de l'alerte Rouge  (seuil et hystérésis)
+    alert1(true),                         ///< Initialisation de l'alerte Orange (seuil et hystérésis) avec inversion
+    alert2(true),                         ///< Initialisation de l'alerte Rouge  (seuil et hystérésis) avec inversion
     startTime(0),                     ///< Heure de démarrage des mesures (HH) 
     stopTime(0)                       ///< Heure de fin des mesures (HH)
   {
@@ -362,27 +362,34 @@ protected:
  * @return L'état de la connexion, true si ok, false en cas d'erreur.
  */
   bool connectGSMGPRS(const byte retry = 10) {
-    int err;
-    for (byte i = 0; i < retry; ++i) {
-      err = modem.waitForNetwork();
-      if (!err) {
-        DEBUG(err); DEBUG(' ');
-        delay(500);
-      } else break;
-    }
-    if (!err) {
-      DEBUG(F("Timeout! No GSM found!\n"));
+    DEBUG(F("GSM... "));
+    bool ok;
+    
+    ok = modem.waitForNetwork();    // Déjà un timeout de 60s
+    if (!ok) {
+      DEBUG(F(" Fail to connect GSM!\n"));
       return false;
     }
 
+    DEBUG(F("\nOperator "));
+    DEBUG(modem.getOperator());
+    DEBUG(F("\nSignal "));
+    DEBUG(modem.getSignalQuality());
+    
+    DEBUG(F("\nGPRS ("));
+    DEBUG(GPRS_APN);
+    DEBUG(F(")... "));
     for (byte i = 0; i < retry; ++i) {
-      err = modem.gprsConnect(String(GPRS_APN).c_str(), String(GPRS_LOGIN).c_str(), String(GPRS_PASSWORD).c_str());
-      if (!err) {
-        DEBUG(err); DEBUG(' ');
+      ok = modem.gprsConnect(String(GPRS_APN).c_str(), String(GPRS_LOGIN).c_str(), String(GPRS_PASSWORD).c_str());
+      if (!ok) {
+        DEBUG(F("fail, "));
         delay(500);
-      } else break;
+      } else {
+        DEBUG(F("OK\n"));
+        break;
+      }
     }
-    if (!err) {
+    if (!ok) {
       DEBUG(F("Timeout! No GPRS network found!\n"));
       return false;
     }

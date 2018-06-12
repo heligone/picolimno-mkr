@@ -50,6 +50,12 @@ public:
     fStatus(false)
   {}
 
+  Alert(const bool& sens) :
+    fSeuil(0),
+    fEcart(0),
+    fStatus(sens)
+  {}
+
   Alert& operator=(const Alert& aAlert) = default;
 
 /**
@@ -85,7 +91,7 @@ public:
   }
 
   bool enabled() const {
-    return (fSeuil == 0 && fEcart == 0);
+    return (fSeuil != 0 || fEcart != 0);
   }
   
   
