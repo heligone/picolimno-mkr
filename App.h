@@ -51,12 +51,6 @@
 /// Nombre maximum de mesures matérielles pou obtenir le nombre d'échantillons matériels nécessaires.
 #define RANGE_SEQ_MAX 175
 
-// Indique la méthode utilisée pour mettre le Pico à l'heure, ou rien :
-// pas de define : pas de mise à l'heure,
-// 0 : GSM,
-// 1 : NTP.
-#define GSM_NTP 1
-
 // Indique la méthode de transmission :
 // Si PETITES_TRAMES est defini : chaque variable est transmise séparément ;
 // Sinon : toutes les variables sont transmises dans une unique requête (array JSON).
@@ -91,7 +85,6 @@ public:
     DEBUG(F("- Mesures toutes les ")); DEBUG(INTERVAL_MESURES); DEBUG(F("s ;\n"));
     DEBUG(F("- Transmissions toutes les ")); DEBUG(INTERVAL_TRANSMISSION); DEBUG(F("s ;\n"));
     DEBUG(F("- Nombre d'echantillons matériels par mesure ")); DEBUG(RANGE_SEQ_MIN); DEBUG(F(" pour ")); DEBUG(RANGE_SEQ_MAX); DEBUG(F(" tentatives ;\n"));
-    DEBUG(F("- Methode de reglage de l'heure ")); DEBUG(GSM_NTP ? F("NTP") : F("GSM")); DEBUG(F(" ;\n"));
 #ifdef PETITES_TRAMES
     DEBUG(F("- Transmission des valeurs par trames distinctes (PETITES).\n"));
 #else
