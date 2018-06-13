@@ -229,7 +229,7 @@ public:
             }    
           }
         }
-      } else {  // Transmettre une trame d'erreur
+      } else {  // Transmettre une trame d'erreur (distance invalide)
           const sample_t sample = { rtc.getEpoch(), F("invalide range"), 0};
           if (!sendSample(sample)) {
             if (!connectGSMGPRS()) {

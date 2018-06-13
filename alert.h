@@ -56,7 +56,11 @@ public:
     fStatus(sens)
   {}
 
-  Alert& operator=(const Alert& aAlert) = default;
+  Alert& operator=(const Alert& aAlert) {
+    fSeuil = aAlert.fSeuil;
+    fEcart = aAlert.fEcart;
+    // on ne modifie pas l'état !
+  }
 
 /**
  * Indique si l'alerte a changé d'état.
@@ -66,6 +70,13 @@ public:
  * @return true si l'état de l'alerte a changé, false sinon.
  */
   bool test(const float& value) {
+
+DEBUG(__FUNCTION__);
+DEBUG(fStatus);
+DEBUG("->");
+DEBUG(fSeuil);
+DEBUG('?');
+DEBUG(value);
     if (fStatus) {  // true 
       if (value < fSeuil ) {
         fStatus = false;
