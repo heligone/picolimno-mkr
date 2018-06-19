@@ -99,18 +99,12 @@ public:
     digitalWrite(GSM_RESETN, HIGH);
     delay(100);
     digitalWrite(GSM_RESETN, LOW);
-// * Modem start
-    modem.restart();
-    const String info = modem.getModemInfo();
-    DEBUG(F("TinyGSM using ")); DEBUG(info); DEBUG('\n');
 
 // Connection GSM & GPRS    
-    DEBUG(F("Setting up GSM & GPRS connection... "));
+    DEBUG(F("Setting up GSM & GPRS connection...\n"));
     if (!connectGSMGPRS()) {
       DEBUG(F("Echec de connexion. Poursuite !\n"));
-      return true;
     }
-    DEBUG('\n');
 
     DEBUG(F("Getting IMEI... "));
     imei = modem.getIMEI();
@@ -139,14 +133,9 @@ public:
     if (!sensors.begin()) return false;
 
 // Define next timer's interrupt
-    DEBUG(F("Start timer.\n"));
-    const byte sec = rtc.getSeconds();
-    const byte minu = rtc.getMinutes();
-    const unsigned t = minu * 60U + sec + INTERVAL_MESURES;
-    rtc.setAlarmSeconds(t % 60);
-    rtc.setAlarmMinutes((t / 60) % 60);
-
-    rtc.enableAlarm(rtc.MATCH_MMSS);
+    DEBUG(F("Start timer every min.\n"));
+    rtc.setAlarmSeconds(59);
+    rtc.enableAlarm(rtc.MATCH_SS);
     rtc.attachInterrupt(App::intTimer);
     App::fIntTimer = false;
     
@@ -161,26 +150,30 @@ public:
   bool loop() {
 //    rtc.standbyMode();
     
-// Si on a détecté un changement de minute, on lance les mesures nécessaires
+// Si on a détecté un changement de minute
     if (App::fIntTimer) {
+      const byte sec = rtc.getSeconds();
+      const byte minu = rtc.getMinutes();
+      const byte heure = rtc.getHours();
+      const unsigned long t = sec + 60U * (minu + 60U * heure);
+      App::fIntTimer = false;
+  
       DEBUG(F("Wakeup @ "));
       DEBUG(getTimestamp());
       DEBUG("\n");
 
-      const byte sec = rtc.getSeconds();
-      const byte minu = rtc.getMinutes();
-      const byte heure = rtc.getHours();
-
-// Calcul de la prochaine interruption
-      const unsigned t = ((minu * 60 + sec) / INTERVAL_MESURES + 1) * INTERVAL_MESURES + 3599;
-      App::fIntTimer = false;
-      rtc.setAlarmSeconds(t % 60);
-      rtc.setAlarmMinutes((t / 60) % 60);
+// Vérification de l'heure de RESET quotidien
+      if ((reset >= 0) && (static_cast<unsigned>(reset) == minu + 60U * heure)) {
+        NVIC_SystemReset();
+      }
 
 // Vérification de la période de veille
       if ((startTime > 0) && (heure < startTime)) return true;      // Pas encore l'heure (veille)
       if ((stopTime > 0) && (heure >= stopTime)) return true;       // Trop tard (veille)
       
+// Présence d'un interval pour déclencher une mesure de distance
+      if ((t % INTERVAL_MESURES) && (t % INTERVAL_TRANSMISSION)) return true;  // pas de mesure à cette minute
+
 // Mesure de distance
       unsigned d[RANGE_SEQ_MIN];
       unsigned n = 0; // nb échantillons valides
@@ -241,7 +234,7 @@ public:
           }
       }
       
-      if ((t % INTERVAL_TRANSMISSION) < INTERVAL_MESURES) {
+      if ((t % INTERVAL_TRANSMISSION) == 0) {   // C'est le moment de transmission
         sample_t samples[4];
         size_t s = 0;
         
@@ -343,8 +336,9 @@ protected:
     serverPort(80),
     alert1(true),                         ///< Initialisation de l'alerte Orange (seuil et hystérésis) avec inversion
     alert2(true),                         ///< Initialisation de l'alerte Rouge  (seuil et hystérésis) avec inversion
-    startTime(0),                     ///< Heure de démarrage des mesures (HH) 
-    stopTime(0)                       ///< Heure de fin des mesures (HH)
+    startTime(0),                         ///< Heure de démarrage des mesures (HH) 
+    stopTime(0),                          ///< Heure de fin des mesures (HH)
+    reset(-1)
   {
   }
 
@@ -355,23 +349,40 @@ protected:
  * @return L'état de la connexion, true si ok, false en cas d'erreur.
  */
   bool connectGSMGPRS(const byte retry = 10) {
-    DEBUG(F("GSM... "));
-    bool ok;
-    
-    ok = modem.waitForNetwork();    // Déjà un timeout de 60s
-    if (!ok) {
-      DEBUG(F(" Fail to connect GSM!\n"));
+    DEBUG(F("GSM...\n"));
+
+    if (!modem.restart()) {
+      DEBUG(F("Error restarting modem!\n"));
       return false;
     }
 
-    DEBUG(F("\nOperator "));
-    DEBUG(modem.getOperator());
-    DEBUG(F("\nSignal "));
-    DEBUG(modem.getSignalQuality());
+    const String info = modem.getModemInfo();
+    DEBUG(F("TinyGSM using ")); DEBUG(info); DEBUG('\n');
+
+    const String SCCID = modem.getSimCCID();
+    DEBUG(F("Sim CCID ")); DEBUG(SCCID);
+    const SimStatus ss = modem.getSimStatus();
+    DEBUG(F(", Status ")); DEBUG(ss == 0 ? F("ERROR!") : ss == 1 ? F("READY.") : ss == 2 ? F("LOCKED!") : F("unknown!")); DEBUG('\n');
+
+    const int battLevel = modem.getBattPercent();
+    DEBUG("Battery level: "); DEBUG(battLevel); DEBUG('\n');
     
-    DEBUG(F("\nGPRS ("));
-    DEBUG(GPRS_APN);
-    DEBUG(F(")... "));
+    DEBUG(F("Waiting for network... "));
+    if (!modem.waitForNetwork()) {
+      DEBUG(F("Not found!\n"));
+      return false;
+    }
+  
+    if (modem.isNetworkConnected()) {
+      DEBUG(F("connected with Operator "));
+      DEBUG(modem.getOperator());
+      DEBUG(F(",Signal "));
+      DEBUG(modem.getSignalQuality());
+      DEBUG('\n');
+    }
+  
+    DEBUG(F("GPRS (")); DEBUG(GPRS_APN); DEBUG(F(")...\n"));
+    bool ok;
     for (byte i = 0; i < retry; ++i) {
       ok = modem.gprsConnect(String(GPRS_APN).c_str(), String(GPRS_LOGIN).c_str(), String(GPRS_PASSWORD).c_str());
       if (!ok) {
@@ -383,98 +394,12 @@ protected:
       }
     }
     if (!ok) {
-      DEBUG(F("Timeout! No GPRS network found!\n"));
+      DEBUG(F("Not found!\n"));
       return false;
     }
 
     return true;  // Connexion avec succès
   }
-
-/**
- * Retourne l'heure à partir d'une requête NTP.
- *
- * @param aURL l'url du service ntp utilisé.
- * @return Le temps epoch écoulé.
- */
-  uint32_t getNTP() {
-    struct __attribute__ ((packed)) NtpPacket { 
-      uint8_t li_vn_mode;      // Eight bits. li, vn, and mode.
-                               // li.   Two bits.   Leap indicator.
-                               // vn.   Three bits. Version number of the protocol.
-                               // mode. Three bits. Client will pick mode 3 for client.
-    
-      uint8_t stratum;         // Eight bits. Stratum level of the local clock.
-      uint8_t poll;            // Eight bits. Maximum interval between successive messages.
-      uint8_t precision;       // Eight bits. Precision of the local clock.
-    
-      uint32_t rootDelay;      // 32 bits. Total round trip delay time.
-      uint32_t rootDispersion; // 32 bits. Max error aloud from primary clock source.
-      uint32_t refId;          // 32 bits. Reference clock identifier.
-    
-      uint32_t refTm_s;        // 32 bits. Reference time-stamp seconds.
-      uint32_t refTm_f;        // 32 bits. Reference time-stamp fraction of a second.
-    
-      uint32_t origTm_s;       // 32 bits. Originate time-stamp seconds.
-      uint32_t origTm_f;       // 32 bits. Originate time-stamp fraction of a second.
-    
-      uint32_t rxTm_s;         // 32 bits. Received time-stamp seconds.
-      uint32_t rxTm_f;         // 32 bits. Received time-stamp fraction of a second.
-    
-      uint8_t txTm_s[4];
-//      uint32_t txTm_s;         // 32 bits and the most important field the client cares about. Transmit time-stamp seconds.
-      uint32_t txTm_f;         // 32 bits. Transmit time-stamp fraction of a second.
-    };
-    NtpPacket packetBuffer;
-    
-    assert(sizeof(packetBuffer) == 48);
-    memset(&packetBuffer, 0, sizeof(packetBuffer));
-    packetBuffer.li_vn_mode = 0b11100011;
-    packetBuffer.stratum = 0;
-    packetBuffer.poll = 6;
-    packetBuffer.precision = 0xEC;
-
-    modem.sendAT(GF("+USOCR=17"));
-    String socket;
-    if (modem.waitResponse(1000L, socket) == 1) {
-      socket.replace("+USOCR:", "");
-      socket.replace(GSM_NL "OK" GSM_NL, "");
-      socket.replace(GSM_NL, " ");
-    }
-    const String ip("195.154.107.205");
-    const String len(sizeof(packetBuffer));
-    modem.sendAT(GF("+USOST=") + socket + ',' + '"' + ip + GF("\",123,") + len);
-    SerialGSM.readStringUntil('@');
-    SerialGSM.write((char*)&packetBuffer, sizeof(packetBuffer));
-
-    String rep;
-    if (modem.waitResponse(1000L, rep) == 1) {
-
-      modem.sendAT(GF("+USORF=") + socket + ',' + len);
-      if (modem.waitResponse(1000L, rep) == 1) {
-        rep.replace("+USORF:", "");
-        rep.replace(GSM_NL "OK" GSM_NL, "");
-        rep.replace(GSM_NL, " ");
-        const int ipInd = rep.indexOf(',');
-        const int portInd = rep.indexOf(',', ipInd+1);
-        const int sizeInd = rep.indexOf(',', portInd+1);
-        const int dataInd = rep.indexOf(',', sizeInd+1);
-        const unsigned s = rep.substring(sizeInd+1, dataInd).toInt();
-        if (s != sizeof(packetBuffer)) {
-          DEBUG("Invalide NTP response length!");
-          return 0;
-        }
-        memcpy(&packetBuffer, rep.c_str() + (dataInd + 2), s);
-        return ((packetBuffer.txTm_s[0] * 0x100UL + packetBuffer.txTm_s[1]) * 0x100UL + packetBuffer.txTm_s[2]) * 0x100UL + packetBuffer.txTm_s[3] - 2208988800UL;
-      } else {
-        DEBUG("NTP Response Error!");
-        return 0;
-      }
-    } else {
-      DEBUG("NTP no response!");
-      return 0;
-    }
-    return 0;
-  };
 
 /**
  * Called every Timer's interruption.
@@ -729,6 +654,13 @@ protected:
     startTime = root["start"];
     stopTime = root["stop"];
 
+    if (root.containsKey("reset")) {
+      const String s = root["reset"];
+      const byte hh = s.toInt();
+      const byte mm = s.substring(s.indexOf(':')+1).toInt();
+      reset = hh * 60U + mm;
+    } else reset = -1;
+
     return true;
   }
  
@@ -768,6 +700,7 @@ private:
 // Parameters
   Alert alert1, alert2;
   byte startTime, stopTime;
+  int reset;            ///< reset time in min ou -1 if not.
 
   static volatile
   bool fIntTimer;
@@ -776,8 +709,5 @@ private:
 
 App* App::pApp;
 RTCZero App::rtc;
-// QueueArray<App::sample_t> App::queue;
 volatile bool App::fIntTimer;
-//const int App::QUEUE_DEPTH = 10;
-
 

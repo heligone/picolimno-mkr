@@ -39,6 +39,48 @@ private:
 
 protected:
 
+  bool readAM2302(float& aTemp, float& aHygro) const {
+    pinMode(amDataPin, OUTPUT);
+    digitalWrite(amDataPin, LOW);   // down
+    delayMicroseconds(1000);    // wait 1 ms
+    pinMode(amDataPin, INPUT_PULLUP);
+    
+    const unsigned p = pulseIn(amDataPin, LOW, 150U);    
+    if (p < 70 || p > 90) return false;   // should be about 80 ms or an error
+
+    uint16_t hygro = 0;
+    for (byte i = 16; i > 0; --i) {
+      const unsigned p = pulseIn(amDataPin, HIGH, 150U);
+      if (!p) return false;   // timeout
+      hygro *= 2;
+      if (p > 50) ++hygro;
+    }
+
+    uint16_t temp = 0;
+    for (byte i = 16; i > 0; --i) {
+      const unsigned p = pulseIn(amDataPin, HIGH, 150U);
+      if (!p) return false;   // timeout
+      temp *= 2;
+      if (p > 50) ++temp;
+    }
+
+    uint8_t chk = 0;
+    for (byte i = 8; i > 0; --i) {
+      const unsigned p = pulseIn(amDataPin, HIGH, 150U);
+      if (!p) return false;   // timeout
+      chk *= 2;
+      if (p > 50) ++chk;
+    }
+
+    if ( ((temp & 0xff00) / 256 + (temp & 0x00ff) + (hygro & 0xff00) / 256 + (hygro & 0x00ff) - chk) & 0x00ff ) return false;
+  
+    aHygro = hygro / 10.0f;
+    aTemp = (temp & 0x8000 ? -1 : 1) * (temp & 0x7fff) / 10.0f;
+
+    return true;
+  }
+
+
 
 public:
 /**
@@ -88,50 +130,15 @@ public:
 /**
  * Lance un échantillonnage et indique à la fois la température et l'humidité mesurées.
  * @see https://cdn-shop.adafruit.com/datasheets/Digital+humidity+and+temperature+sensor+AM2302.pdf
+ * @note Lance deux fois la mesure car la première et parfois suspecte.
  * 
  * @param aTemp Retourne la température mesurée en °C.
  * @param aHygro Retourne le taux d'humidité dans l'air en %H.
  * @return Le succès de la collecte des résultats, ou pas ; en cas d'échec, les paramètres précédents doivent être ignorés.
  */
   bool sampleAM2302(float& aTemp, float& aHygro) const {
-    pinMode(amDataPin, OUTPUT);
-    digitalWrite(amDataPin, LOW);   // down
-    delayMicroseconds(1000);    // wait 1 ms
-    pinMode(amDataPin, INPUT_PULLUP);
-    
-    const unsigned p = pulseIn(amDataPin, LOW, 150U);    
-    if (p < 70 || p > 90) return false;   // should be about 80 ms or an error
-
-    uint16_t hygro = 0;
-    for (byte i = 16; i > 0; --i) {
-      const unsigned p = pulseIn(amDataPin, HIGH, 150U);
-      if (!p) return false;   // timeout
-      hygro *= 2;
-      if (p > 50) ++hygro;
-    }
-
-    uint16_t temp = 0;
-    for (byte i = 16; i > 0; --i) {
-      const unsigned p = pulseIn(amDataPin, HIGH, 150U);
-      if (!p) return false;   // timeout
-      temp *= 2;
-      if (p > 50) ++temp;
-    }
-
-    uint8_t chk = 0;
-    for (byte i = 8; i > 0; --i) {
-      const unsigned p = pulseIn(amDataPin, HIGH, 150U);
-      if (!p) return false;   // timeout
-      chk *= 2;
-      if (p > 50) ++chk;
-    }
-
-    if ( ((temp & 0xff00) / 256 + (temp & 0x00ff) + (hygro & 0xff00) / 256 + (hygro & 0x00ff) - chk) & 0x00ff ) return false;
-  
-    aHygro = hygro / 10.0f;
-    aTemp = (temp & 0x8000 ? -1 : 1) * (temp & 0x7fff) / 10.0f;
-
-    return true;
+    readAM2302(aTemp, aHygro);
+    return readAM2302(aTemp, aHygro);
   }
 
 
