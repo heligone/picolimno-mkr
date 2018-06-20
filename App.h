@@ -44,7 +44,7 @@
 #define INTERVAL_MESURES (60)
 
 /// Temps en seconde entre deux transmissions.
-#define INTERVAL_TRANSMISSION (15*60)
+#define INTERVAL_TRANSMISSION (5*60)
 
 /// Nombre d'échantillons matériels nécessaires pour faire un échantillon brut après médiane (minimum sinon l'échantillon est invalide).
 #define RANGE_SEQ_MIN 10
@@ -151,169 +151,175 @@ public:
 //    rtc.standbyMode();
     
 // Si on a détecté un changement de minute
-    if (App::fIntTimer) {
-      const byte sec = rtc.getSeconds();
-      const byte minu = rtc.getMinutes();
-      const byte heure = rtc.getHours();
-      const unsigned long t = sec + 60U * (minu + 60U * heure);
-      App::fIntTimer = false;
-  
-      DEBUG(F("Wakeup @ "));
-      DEBUG(getTimestamp());
-      DEBUG("\n");
+    if (!App::fIntTimer) return true;
+
+    const byte sec = rtc.getSeconds();
+    const byte minu = rtc.getMinutes();
+    const byte heure = rtc.getHours();
+    const unsigned long t = sec + 60U * (minu + 60U * heure);
+    App::fIntTimer = false;
+
+    DEBUG(F("Wakeup @ "));
+    DEBUG(getTimestamp());
+    DEBUG("\n");
 
 // Vérification de l'heure de RESET quotidien
-      if ((reset >= 0) && (static_cast<unsigned>(reset) == minu + 60U * heure)) {
-        NVIC_SystemReset();
-      }
+    if ((reset >= 0) && (static_cast<unsigned>(reset) == minu + 60U * heure)) {
+      NVIC_SystemReset();
+    }
 
 // Vérification de la période de veille
-      if ((startTime > 0) && (heure < startTime)) return true;      // Pas encore l'heure (veille)
-      if ((stopTime > 0) && (heure >= stopTime)) return true;       // Trop tard (veille)
+    if ((startTime > 0) && (heure < startTime)) return true;      // Pas encore l'heure (veille)
+    if ((stopTime > 0) && (heure >= stopTime)) return true;       // Trop tard (veille)
       
 // Présence d'un interval pour déclencher une mesure de distance
-      if ((t % INTERVAL_MESURES) && (t % INTERVAL_TRANSMISSION)) return true;  // pas de mesure à cette minute
+    if ((t % INTERVAL_MESURES) && (t % INTERVAL_TRANSMISSION)) return true;  // pas de mesure à cette minute
 
 // Mesure de distance
-      unsigned d[RANGE_SEQ_MIN];
-      unsigned n = 0; // nb échantillons valides
-      for (unsigned i = 0; i < RANGE_SEQ_MAX; ++i) {
-        const unsigned s = sensors.sampleRange();
-        if (s > 0) {
-          d[n++] = s;
-          DEBUG(s); DEBUG(F("--"));
-          if (n >= RANGE_SEQ_MIN) break; // Objectif atteint
-        }
+    unsigned d[RANGE_SEQ_MIN];
+    unsigned n = 0; // nb échantillons valides
+    for (unsigned i = 0; i < RANGE_SEQ_MAX; ++i) {
+      const unsigned s = sensors.sampleRange();
+      if (s > 0) {
+        d[n++] = s;
+        DEBUG(s); DEBUG(F("--"));
+        if (n >= RANGE_SEQ_MIN) break; // Objectif atteint
       }
-      DEBUG('\n');
+    }
+    DEBUG('\n');
       
-      if (n > 1) {
-        qsort(d, n, sizeof(unsigned), [](const void* a, const void* b) -> int { 
-          const unsigned int_a = * ( (unsigned*) a );
-          const unsigned int_b = * ( (unsigned*) b );
-          return (int_a > int_b) - (int_a < int_b);
-        });
-      }
+    if (n > 1) {
+      qsort(d, n, sizeof(unsigned), [](const void* a, const void* b) -> int { 
+        const unsigned int_a = * ( (unsigned*) a );
+        const unsigned int_b = * ( (unsigned*) b );
+        return (int_a > int_b) - (int_a < int_b);
+      });
+    }
             
-      const unsigned distance = (n >= RANGE_SEQ_MIN ? d[n / 2] : 0);
-      DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG(F(" - Ech. : ")); DEBUG(n); DEBUG('\n');
+    const unsigned distance = (n >= RANGE_SEQ_MIN ? d[n / 2] : 0);
+    DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG(F(" - Ech. : ")); DEBUG(n); DEBUG('\n');
 
-      if (distance > 0) {   // Pas d'alerte en cas de valeur à 0
-        if (alert1.enabled() && alert1.test(distance / 10.0f)) {    // Alerte activée et dépassement de seuil (montant ou descendant)
-          const sample_t sample = { rtc.getEpoch(), F("alert1"), distance / 10.0f };
-          if (!sendSample(sample)) {
-            if (!connectGSMGPRS()) {
-              DEBUG(F("Echec de connexion. Poursuite !\n"));
-            }
-            if (!sendSample(sample)) {
-              DEBUG(F("Echec de retransmission. Poursuite !\n"));
-            }    
-          }
-        }
-  
-        if (alert2.enabled() && alert2.test(distance / 10.0f)) {    // Alerte activée et dépassement de seuil (montant ou descendant)
-          const sample_t sample = { rtc.getEpoch(), F("alert2"), distance / 10.0f };
-          if (!sendSample(sample)) {
-            if (!connectGSMGPRS()) {
-              DEBUG(F("Echec de connexion. Poursuite !\n"));
-            }
-            if (!sendSample(sample)) {
-              DEBUG(F("Echec de retransmission. Poursuite !\n"));
-            }    
-          }
-        }
-      } else {  // Transmettre une trame d'erreur (distance invalide)
-          const sample_t sample = { rtc.getEpoch(), F("invalide range"), 0};
-          if (!sendSample(sample)) {
-            if (!connectGSMGPRS()) {
-              DEBUG(F("Echec de connexion. Poursuite !\n"));
-            }
-            if (!sendSample(sample)) {
-              DEBUG(F("Echec de retransmission. Poursuite !\n"));
-            }    
-          }
-      }
-      
-      if ((t % INTERVAL_TRANSMISSION) == 0) {   // C'est le moment de transmission
-        sample_t samples[4];
-        size_t s = 0;
-        
-        if (distance > 0) { // Ne pas transmettre de mesure invalide.
-          samples[s] = { rtc.getEpoch(), F("range"), distance / 10.0f };  // Utilisation du dernier échantillon (valide).
-#ifdef PETITES_TRAMES
-          if (!sendSample(samples[s])) {
-            if (!connectGSMGPRS()) {
-              DEBUG(F("Echec de connexion. Poursuite !\n"));
-            }
-            if (!sendSample(samples[s])) {
-              DEBUG(F("Echec de retransmission. Poursuite !\n"));
-            }    
-          }
-#endif
-          ++s;
-        }
-
-        float temp, hygro = 0.0;
-        if (sensors.sampleAM2302(temp, hygro)) {
-          samples[s] = { rtc.getEpoch(), F("temp"), temp };
-#ifdef PETITES_TRAMES
-          if (!sendSample(samples[s])) {
-            if (!connectGSMGPRS()) {
-              DEBUG(F("Echec de connexion. Poursuite !\n"));
-            }
-            if (!sendSample(samples[s])) {
-              DEBUG(F("Echec de retransmission. Poursuite !\n"));
-            }    
-          }
-#endif
-          ++s;
-          DEBUG(F("Temperature : ")); DEBUG(temp); DEBUG('\n');
-          
-          samples[s] = { rtc.getEpoch(), F("hygro"), hygro };
-#ifdef PETITES_TRAMES
-          if (!sendSample(samples[s])) {
-            if (!connectGSMGPRS()) {
-              DEBUG(F("Echec de connexion. Poursuite !\n"));
-            }
-            if (!sendSample(samples[s])) {
-              DEBUG(F("Echec de retransmission. Poursuite !\n"));
-            }    
-          }
-#endif
-          ++s;
-          DEBUG(F("Hygrometrie : ")); DEBUG(hygro); DEBUG('\n');
-        }
-        const float vBat = sensors.sampleBattery();
-        samples[s] = { rtc.getEpoch(), F("vbat"), vBat };
-#ifdef PETITES_TRAMES
-          if (!sendSample(samples[s])) {
-            if (!connectGSMGPRS()) {
-              DEBUG(F("Echec de connexion. Poursuite !\n"));
-            }
-            if (!sendSample(samples[s])) {
-              DEBUG(F("Echec de retransmission. Poursuite !\n"));
-            }    
-          }
-#endif
-        ++s;
-        DEBUG("Batterie : "); DEBUG(vBat); DEBUG('\n');
-
-#ifndef PETITES_TRAMES
-        if (!sendSamples(samples, s)) {
+    if (distance > 0) {   // Pas d'alerte en cas de valeur à 0
+      if (alert1.enabled() && alert1.test(distance / 10.0f)) {    // Alerte activée et dépassement de seuil (montant ou descendant)
+        const sample_t sample = { rtc.getEpoch(), F("alert1"), distance / 10.0f };
+        if (!sendSample(sample)) {
           if (!connectGSMGPRS()) {
             DEBUG(F("Echec de connexion. Poursuite !\n"));
           }
-          if (!sendSamples(samples, s)) {
+          if (!sendSample(sample)) {
+            DEBUG(F("Echec de retransmission. Poursuite !\n"));
+          }    
+        }
+      }
+  
+      if (alert2.enabled() && alert2.test(distance / 10.0f)) {    // Alerte activée et dépassement de seuil (montant ou descendant)
+        const sample_t sample = { rtc.getEpoch(), F("alert2"), distance / 10.0f };
+        if (!sendSample(sample)) {
+          if (!connectGSMGPRS()) {
+            DEBUG(F("Echec de connexion. Poursuite !\n"));
+          }
+          if (!sendSample(sample)) {
+            DEBUG(F("Echec de retransmission. Poursuite !\n"));
+          }    
+        }
+      }
+    } else {  // Transmettre une trame d'erreur (distance invalide)
+      const sample_t sample = { rtc.getEpoch(), F("invalide range"), 0};
+      if (!sendSample(sample)) {
+        if (!connectGSMGPRS()) {
+          DEBUG(F("Echec de connexion. Poursuite !\n"));
+        }
+        if (!sendSample(sample)) {
+          DEBUG(F("Echec de retransmission. Poursuite !\n"));
+        }    
+      } 
+    }
+      
+    if ((t % INTERVAL_TRANSMISSION) == 0) {   // C'est le moment de transmission
+      sample_t samples[4];
+      size_t s = 0;
+      
+// Transmission distance si non nulle.
+      if (distance > 0) { // Ne pas transmettre de mesure invalide.
+        samples[s] = { rtc.getEpoch(), F("range"), distance / 10.0f };  // Utilisation du dernier échantillon (valide).
+#ifdef PETITES_TRAMES
+        if (!sendSample(samples[s])) {
+          if (!connectGSMGPRS()) {
+            DEBUG(F("Echec de connexion. Poursuite !\n"));
+          }
+          if (!sendSample(samples[s])) {
             DEBUG(F("Echec de retransmission. Poursuite !\n"));
           }    
         }
 #endif
-// Get Parameters
-        DEBUG(F("Get parameters..."));
-        const bool ok = getParameters();
-        DEBUG(ok);
-        DEBUG('\n');
+        ++s;
       }
+
+// Transmission temp & hygro si OK
+      float temp, hygro = 0.0;
+      if (sensors.sampleAM2302(temp, hygro)) {
+        samples[s] = { rtc.getEpoch(), F("temp"), temp };
+#ifdef PETITES_TRAMES
+        if (!sendSample(samples[s])) {
+          if (!connectGSMGPRS()) {
+            DEBUG(F("Echec de connexion. Poursuite !\n"));
+          }
+          if (!sendSample(samples[s])) {
+            DEBUG(F("Echec de retransmission. Poursuite !\n"));
+          }    
+        }
+#endif
+        ++s;
+        DEBUG(F("Temperature : ")); DEBUG(temp); DEBUG('\n');
+          
+        samples[s] = { rtc.getEpoch(), F("hygro"), hygro };
+#ifdef PETITES_TRAMES
+        if (!sendSample(samples[s])) {
+          if (!connectGSMGPRS()) {
+            DEBUG(F("Echec de connexion. Poursuite !\n"));
+          }
+          if (!sendSample(samples[s])) {
+            DEBUG(F("Echec de retransmission. Poursuite !\n"));
+          }    
+        }
+#endif
+        ++s;
+        DEBUG(F("Hygrometrie : ")); DEBUG(hygro); DEBUG('\n');
+      }
+
+// Transmission vbat
+      const float vBat = sensors.sampleBattery();
+      samples[s] = { rtc.getEpoch(), F("vbat"), vBat };
+#ifdef PETITES_TRAMES
+        if (!sendSample(samples[s])) {
+          if (!connectGSMGPRS()) {
+            DEBUG(F("Echec de connexion. Poursuite !\n"));
+          }
+          if (!sendSample(samples[s])) {
+            DEBUG(F("Echec de retransmission. Poursuite !\n"));
+          }    
+        }
+#endif
+      ++s;
+      DEBUG("Batterie : "); DEBUG(vBat); DEBUG('\n');
+
+// Si grandes trames, transmission de l'ensemble
+#ifndef PETITES_TRAMES
+      if (!sendSamples(samples, s)) {
+        if (!connectGSMGPRS()) {
+          DEBUG(F("Echec de connexion. Poursuite !\n"));
+        }
+        if (!sendSamples(samples, s)) {
+          DEBUG(F("Echec de retransmission. Poursuite !\n"));
+        }    
+      }
+#endif
+
+// Récupération des paramètres
+      DEBUG(F("Get parameters..."));
+      const bool ok = getParameters();
+      DEBUG(ok);
+      DEBUG('\n');
     }  
     return true;
   }
