@@ -130,7 +130,19 @@ public:
     }
 
 // Start all sensors (init...)
-    if (!sensors.begin()) return false;
+    if (!sensors.begin()) {
+      DEBUG(F("Erreur d'initialisation des capteurs. ABANDON !\n"));
+      return false;
+    }
+
+// Mesurer la distance et initialiser les alertes
+    const unsigned distance = mesurerDistance();
+    if (distance > 0) {   // Pas d'alerte en cas de valeur à 0
+      if (alert1.enabled()) alert1.test(distance / 10.0f);
+      if (alert2.enabled()) alert2.test(distance / 10.0f);
+    } else {
+      DEBUG(F("Première mesure de distance invalide. Poursuite !\n"));
+    }
 
 // Define next timer's interrupt
     DEBUG(F("Start timer every min.\n"));
@@ -159,9 +171,7 @@ public:
     const unsigned long t = sec + 60U * (minu + 60U * heure);
     App::fIntTimer = false;
 
-    DEBUG(F("Wakeup @ "));
-    DEBUG(getTimestamp());
-    DEBUG("\n");
+    DEBUG(F("Wakeup @ ")); DEBUG(getTimestamp()); DEBUG("\n");
 
 // Vérification de l'heure de RESET quotidien
     if ((reset >= 0) && (static_cast<unsigned>(reset) == minu + 60U * heure)) {
@@ -172,32 +182,11 @@ public:
     if ((startTime > 0) && (heure < startTime)) return true;      // Pas encore l'heure (veille)
     if ((stopTime > 0) && (heure >= stopTime)) return true;       // Trop tard (veille)
       
-// Présence d'un interval pour déclencher une mesure de distance
+// Présence d'un intervale pour déclencher une mesure de distance
     if ((t % INTERVAL_MESURES) && (t % INTERVAL_TRANSMISSION)) return true;  // pas de mesure à cette minute
 
 // Mesure de distance
-    unsigned d[RANGE_SEQ_MIN];
-    unsigned n = 0; // nb échantillons valides
-    for (unsigned i = 0; i < RANGE_SEQ_MAX; ++i) {
-      const unsigned s = sensors.sampleRange();
-      if (s > 0) {
-        d[n++] = s;
-        DEBUG(s); DEBUG(F("--"));
-        if (n >= RANGE_SEQ_MIN) break; // Objectif atteint
-      }
-    }
-    DEBUG('\n');
-      
-    if (n > 1) {
-      qsort(d, n, sizeof(unsigned), [](const void* a, const void* b) -> int { 
-        const unsigned int_a = * ( (unsigned*) a );
-        const unsigned int_b = * ( (unsigned*) b );
-        return (int_a > int_b) - (int_a < int_b);
-      });
-    }
-            
-    const unsigned distance = (n >= RANGE_SEQ_MIN ? d[n / 2] : 0);
-    DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG(F(" - Ech. : ")); DEBUG(n); DEBUG('\n');
+    const unsigned distance = mesurerDistance();
 
     if (distance > 0) {   // Pas d'alerte en cas de valeur à 0
       if (alert1.enabled() && alert1.test(distance / 10.0f)) {    // Alerte activée et dépassement de seuil (montant ou descendant)
@@ -342,8 +331,8 @@ protected:
     modem(SerialGSM),                 ///< Initialisation de la carte modem GSM.
     serverName(F("api.picolimno.fr")),
     serverPort(80),
-    alert1(true),                         ///< Initialisation de l'alerte Orange (seuil et hystérésis) avec inversion
-    alert2(true),                         ///< Initialisation de l'alerte Rouge  (seuil et hystérésis) avec inversion
+    alert1(),                             ///< Initialisation de l'alerte Orange (seuil et hystérésis)
+    alert2(),                             ///< Initialisation de l'alerte Rouge  (seuil et hystérésis)
     startTime(0),                         ///< Heure de démarrage des mesures (HH) 
     stopTime(0),                          ///< Heure de fin des mesures (HH)
     reset(-1)
@@ -670,6 +659,35 @@ protected:
     } else reset = -1;
 
     return true;
+  }
+
+/**
+ * 
+ */
+  unsigned mesurerDistance() const {
+    unsigned d[RANGE_SEQ_MIN];
+    unsigned n = 0; // nb échantillons valides
+    for (unsigned i = 0; i < RANGE_SEQ_MAX; ++i) {
+      const unsigned s = sensors.sampleRange();
+      if (s > 0) {
+        d[n++] = s;
+        DEBUG(s); DEBUG(F("--"));
+        if (n >= RANGE_SEQ_MIN) break; // Objectif atteint
+      }
+    }
+    DEBUG('\n');
+      
+    if (n > 1) {
+      qsort(d, n, sizeof(unsigned), [](const void* a, const void* b) -> int { 
+        const unsigned int_a = * ( (unsigned*) a );
+        const unsigned int_b = * ( (unsigned*) b );
+        return (int_a > int_b) - (int_a < int_b);
+      });
+    }
+
+    const unsigned distance = (n >= RANGE_SEQ_MIN) ? d[n / 2] : 0;            
+    DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG(F(" - Ech. : ")); DEBUG(n); DEBUG('\n');
+    return distance;
   }
  
 private:
