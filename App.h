@@ -285,6 +285,8 @@ public:
 #endif
         ++s;
         DEBUG(F("Hygrometrie : ")); DEBUG(hygro); DEBUG('\n');
+      } else { 
+        DEBUG(F("Echec de mesure de temps & hygro!\n"));
       }
 
 // Transmission vbat

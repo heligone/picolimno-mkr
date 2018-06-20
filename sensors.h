@@ -138,6 +138,7 @@ public:
  */
   bool sampleAM2302(float& aTemp, float& aHygro) const {
     readAM2302(aTemp, aHygro);
+    delay(100);
     return readAM2302(aTemp, aHygro);
   }
 
