@@ -47,7 +47,7 @@ public:
   Alert(const float& seuil = 0, const float& ecart = 0) :
     fSeuil(seuil),
     fEcart(ecart),
-    fStatus(false)
+    fStatus(true)
   {}
 
   Alert(const bool& sens) :

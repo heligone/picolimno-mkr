@@ -41,15 +41,15 @@
 #include <ArduinoHttpClient.h>
 
 /// Temps en secondes entre deux mesures de distance.
-#define INTERVAL_MESURES (60)
+#define INTERVAL_MESURES (2*60)
 
 /// Temps en seconde entre deux transmissions.
-#define INTERVAL_TRANSMISSION (5*60)
+#define INTERVAL_TRANSMISSION (15*60)
 
 /// Nombre d'échantillons matériels nécessaires pour faire un échantillon brut après médiane (minimum sinon l'échantillon est invalide).
-#define RANGE_SEQ_MIN 10
+#define RANGE_SEQ_MIN 20
 /// Nombre maximum de mesures matérielles pou obtenir le nombre d'échantillons matériels nécessaires.
-#define RANGE_SEQ_MAX 175
+#define RANGE_SEQ_MAX 60
 
 // Indique la méthode de transmission :
 // Si PETITES_TRAMES est defini : chaque variable est transmise séparément ;
@@ -331,8 +331,8 @@ protected:
     modem(SerialGSM),                 ///< Initialisation de la carte modem GSM.
     serverName(F("api.picolimno.fr")),
     serverPort(80),
-    alert1(),                             ///< Initialisation de l'alerte Orange (seuil et hystérésis)
-    alert2(),                             ///< Initialisation de l'alerte Rouge  (seuil et hystérésis)
+    alert1(),                             ///< Initialisation de l'alerte Rouge (seuil et hystérésis)
+    alert2(),                             ///< Initialisation de l'alerte Orange  (seuil et hystérésis)
     startTime(0),                         ///< Heure de démarrage des mesures (HH) 
     stopTime(0),                          ///< Heure de fin des mesures (HH)
     reset(-1)
