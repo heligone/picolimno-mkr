@@ -25,7 +25,7 @@
 #define DEBUG_BUILD 1
 
 #ifdef DEBUG_BUILD
-#  define DEBUG(x) do { Serial.print(x); Serial1.print(x);  } while(0)
+#  define DEBUG(x) do { Serial.print(x); } while(0)
 #else
 #  define DEBUG(x) do {} while (0)
 #endif

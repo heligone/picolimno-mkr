@@ -35,13 +35,10 @@
 
 #include "sensors.h"
 #include "alert.h"
-
-#define TINY_GSM_MODEM_UBLOX
-#include <TinyGsmClient.h>
-#include <ArduinoHttpClient.h>
+#include "communication.h"
 
 /// Temps en secondes entre deux mesures de distance.
-#define INTERVAL_MESURES (2*60)
+#define INTERVAL_MESURES (15)
 
 /// Temps en seconde entre deux transmissions.
 #define INTERVAL_TRANSMISSION (15*60)
@@ -91,42 +88,24 @@ public:
     DEBUG(F("- Transmission des valeurs regroupees par trames (GRANDES).\n"));
 #endif
 
-// GSM Card
-// * set serial baudrate
-    SerialGSM.begin(115200);
-// * hard resert
-    pinMode(GSM_RESETN, OUTPUT);
-    digitalWrite(GSM_RESETN, HIGH);
-    delay(100);
-    digitalWrite(GSM_RESETN, LOW);
+    DEBUG(F("Communication setup\n"));
+    communication.setup();
 
-// Connection GSM & GPRS    
-    DEBUG(F("Setting up GSM & GPRS connection...\n"));
-    if (!connectGSMGPRS()) {
-      DEBUG(F("Echec de connexion. Poursuite !\n"));
-    }
-
-    DEBUG(F("Getting IMEI... "));
-    imei = modem.getIMEI();
+    imei = communication.getIMEI();
     DEBUG(F("DeviceID: GSM-")); DEBUG(imei); DEBUG('\n');
 
     rtc.begin();
 
 // Get Parameters & datetime
     DEBUG(F("Get parameters..."));
-    const bool ok = getParameters();
+    const bool ok = communication.getParameters(imei, rtc, alert1, alert2, startTime, stopTime, reset);
     DEBUG(ok);
     DEBUG('\n');
 
 // Sending Status
     DEBUG(F("Sending Status Starting\n"));
-    if (!sendStatus(F("Starting"))) {
-      if (!connectGSMGPRS()) {
-        DEBUG(F("Echec de connexion. Poursuite !\n"));
-      }
-      if (!sendStatus(F("Starting"))) {
-        DEBUG(F("Echec de retransmission. Poursuite !\n"));
-      }    
+    if (!communication.sendStatus(rtc, F("Starting"), imei)) {
+      DEBUG(F("Echec de transmission. Poursuite !\n"));
     }
 
 // Start all sensors (init...)
@@ -190,55 +169,35 @@ public:
 
     if (distance > 0) {   // Pas d'alerte en cas de valeur à 0
       if (alert1.enabled() && alert1.test(distance / 10.0f)) {    // Alerte activée et dépassement de seuil (montant ou descendant)
-        const sample_t sample = { rtc.getEpoch(), F("alert1"), distance / 10.0f };
-        if (!sendSample(sample)) {
-          if (!connectGSMGPRS()) {
-            DEBUG(F("Echec de connexion. Poursuite !\n"));
-          }
-          if (!sendSample(sample)) {
-            DEBUG(F("Echec de retransmission. Poursuite !\n"));
-          }    
+        const Communication::sample_t sample = { rtc.getEpoch(), F("alert1"), distance / 10.0f };
+        if (!communication.sendSample(sample, imei)) {
+          DEBUG(F("Echec de transmission. Poursuite !\n"));
         }
       }
   
       if (alert2.enabled() && alert2.test(distance / 10.0f)) {    // Alerte activée et dépassement de seuil (montant ou descendant)
-        const sample_t sample = { rtc.getEpoch(), F("alert2"), distance / 10.0f };
-        if (!sendSample(sample)) {
-          if (!connectGSMGPRS()) {
-            DEBUG(F("Echec de connexion. Poursuite !\n"));
-          }
-          if (!sendSample(sample)) {
-            DEBUG(F("Echec de retransmission. Poursuite !\n"));
-          }    
+        const Communication::sample_t sample = { rtc.getEpoch(), F("alert2"), distance / 10.0f };
+        if (!communication.sendSample(sample, imei)) {
+          DEBUG(F("Echec de transmission. Poursuite !\n"));
         }
       }
     } else {  // Transmettre une trame d'erreur (distance invalide)
-      const sample_t sample = { rtc.getEpoch(), F("invalide range"), 0};
-      if (!sendSample(sample)) {
-        if (!connectGSMGPRS()) {
-          DEBUG(F("Echec de connexion. Poursuite !\n"));
-        }
-        if (!sendSample(sample)) {
-          DEBUG(F("Echec de retransmission. Poursuite !\n"));
-        }    
-      } 
+      const Communication::sample_t sample = { rtc.getEpoch(), F("invalide range"), 0};
+      if (!communication.sendSample(sample, imei)) {
+        DEBUG(F("Echec de transmission. Poursuite !\n"));
+      }
     }
       
     if ((t % INTERVAL_TRANSMISSION) == 0) {   // C'est le moment de transmission
-      sample_t samples[4];
+      Communication::sample_t samples[4];
       size_t s = 0;
       
 // Transmission distance si non nulle.
       if (distance > 0) { // Ne pas transmettre de mesure invalide.
         samples[s] = { rtc.getEpoch(), F("range"), distance / 10.0f };  // Utilisation du dernier échantillon (valide).
 #ifdef PETITES_TRAMES
-        if (!sendSample(samples[s])) {
-          if (!connectGSMGPRS()) {
-            DEBUG(F("Echec de connexion. Poursuite !\n"));
-          }
-          if (!sendSample(samples[s])) {
-            DEBUG(F("Echec de retransmission. Poursuite !\n"));
-          }    
+        if (!communication.sendSample(samples[s], imei)) {
+          DEBUG(F("Echec de transmission. Poursuite !\n"));
         }
 #endif
         ++s;
@@ -249,13 +208,8 @@ public:
       if (sensors.sampleAM2302(temp, hygro)) {
         samples[s] = { rtc.getEpoch(), F("temp"), temp };
 #ifdef PETITES_TRAMES
-        if (!sendSample(samples[s])) {
-          if (!connectGSMGPRS()) {
-            DEBUG(F("Echec de connexion. Poursuite !\n"));
-          }
-          if (!sendSample(samples[s])) {
-            DEBUG(F("Echec de retransmission. Poursuite !\n"));
-          }    
+        if (!communication.sendSample(samples[s], imei)) {
+          DEBUG(F("Echec de transmission. Poursuite !\n"));
         }
 #endif
         ++s;
@@ -263,13 +217,8 @@ public:
           
         samples[s] = { rtc.getEpoch(), F("hygro"), hygro };
 #ifdef PETITES_TRAMES
-        if (!sendSample(samples[s])) {
-          if (!connectGSMGPRS()) {
-            DEBUG(F("Echec de connexion. Poursuite !\n"));
-          }
-          if (!sendSample(samples[s])) {
-            DEBUG(F("Echec de retransmission. Poursuite !\n"));
-          }    
+        if (!communication.sendSample(samples[s], imei)) {
+          DEBUG(F("Echec de transmission. Poursuite !\n"));
         }
 #endif
         ++s;
@@ -282,13 +231,8 @@ public:
       const float vBat = sensors.sampleBattery();
       samples[s] = { rtc.getEpoch(), F("vbat"), vBat };
 #ifdef PETITES_TRAMES
-        if (!sendSample(samples[s])) {
-          if (!connectGSMGPRS()) {
-            DEBUG(F("Echec de connexion. Poursuite !\n"));
-          }
-          if (!sendSample(samples[s])) {
-            DEBUG(F("Echec de retransmission. Poursuite !\n"));
-          }    
+        if (!communication.sendSample(samples[s], imei)) {
+          DEBUG(F("Echec de transmission. Poursuite !\n"));
         }
 #endif
       ++s;
@@ -296,19 +240,14 @@ public:
 
 // Si grandes trames, transmission de l'ensemble
 #ifndef PETITES_TRAMES
-      if (!sendSamples(samples, s)) {
-        if (!connectGSMGPRS()) {
-          DEBUG(F("Echec de connexion. Poursuite !\n"));
-        }
-        if (!sendSamples(samples, s)) {
-          DEBUG(F("Echec de retransmission. Poursuite !\n"));
-        }    
+      if (!communication.sendSamples(samples, s, imei)) {
+        DEBUG(F("Echec de transmission. Poursuite !\n"));
       }
 #endif
 
 // Récupération des paramètres
       DEBUG(F("Get parameters..."));
-      const bool ok = getParameters();
+      const bool ok = communication.getParameters(imei, rtc, alert1, alert2, startTime, stopTime, reset);
       DEBUG(ok);
       DEBUG('\n');
     }  
@@ -324,78 +263,14 @@ protected:
  * @param password APN login's password as PROGMEM char*
  */
   App(const __FlashStringHelper apn[], const __FlashStringHelper login[], const __FlashStringHelper password[]) :
-    sensors(TRIGGER, ECHO, AM2302),   ///< Initialisation de capteurs (broches de connexion)
-    GPRS_APN(apn), 
-    GPRS_LOGIN(login),
-    GPRS_PASSWORD(password),
-    modem(SerialGSM),                 ///< Initialisation de la carte modem GSM.
-    serverName(F("api.picolimno.fr")),
-    serverPort(80),
+    sensors(TRIGGER, ECHO, AM2302),       ///< Initialisation de capteurs (broches de connexion)
+    communication(Communication::getInstance(apn, login, password, F("api.picolimno.fr"), 80)),  ///< Initialisation de la communication.
     alert1(),                             ///< Initialisation de l'alerte Rouge (seuil et hystérésis)
     alert2(),                             ///< Initialisation de l'alerte Orange  (seuil et hystérésis)
     startTime(0),                         ///< Heure de démarrage des mesures (HH) 
     stopTime(0),                          ///< Heure de fin des mesures (HH)
     reset(-1)
   {
-  }
-
-/**
- * Connecte ou reconnecte le GSM et le GPRS selon les besoins.
- * 
- * @param retry Nombre de réessais pour obtenir les 2 connexions successives, 10 par défaut.
- * @return L'état de la connexion, true si ok, false en cas d'erreur.
- */
-  bool connectGSMGPRS(const byte retry = 10) {
-    DEBUG(F("GSM...\n"));
-
-    if (!modem.restart()) {
-      DEBUG(F("Error restarting modem!\n"));
-      return false;
-    }
-
-    const String info = modem.getModemInfo();
-    DEBUG(F("TinyGSM using ")); DEBUG(info); DEBUG('\n');
-
-    const String SCCID = modem.getSimCCID();
-    DEBUG(F("Sim CCID ")); DEBUG(SCCID);
-    const SimStatus ss = modem.getSimStatus();
-    DEBUG(F(", Status ")); DEBUG(ss == 0 ? F("ERROR!") : ss == 1 ? F("READY.") : ss == 2 ? F("LOCKED!") : F("unknown!")); DEBUG('\n');
-
-    const int battLevel = modem.getBattPercent();
-    DEBUG("Battery level: "); DEBUG(battLevel); DEBUG('\n');
-    
-    DEBUG(F("Waiting for network... "));
-    if (!modem.waitForNetwork()) {
-      DEBUG(F("Not found!\n"));
-      return false;
-    }
-  
-    if (modem.isNetworkConnected()) {
-      DEBUG(F("connected with Operator "));
-      DEBUG(modem.getOperator());
-      DEBUG(F(",Signal "));
-      DEBUG(modem.getSignalQuality());
-      DEBUG('\n');
-    }
-  
-    DEBUG(F("GPRS (")); DEBUG(GPRS_APN); DEBUG(F(")...\n"));
-    bool ok;
-    for (byte i = 0; i < retry; ++i) {
-      ok = modem.gprsConnect(String(GPRS_APN).c_str(), String(GPRS_LOGIN).c_str(), String(GPRS_PASSWORD).c_str());
-      if (!ok) {
-        DEBUG(F("fail, "));
-        delay(500);
-      } else {
-        DEBUG(F("OK\n"));
-        break;
-      }
-    }
-    if (!ok) {
-      DEBUG(F("Not found!\n"));
-      return false;
-    }
-
-    return true;  // Connexion avec succès
   }
 
 /**
@@ -406,152 +281,7 @@ protected:
   void intTimer() {
     App::fIntTimer = true;
   }
-
-/**
- * Transmet l'état du device sous la forme d'un flux Json qui contient le statut ainsi que d'autres éléments :
- * - L'heure mémorisée au moment de la transmission ;
- * - L'état tel que passé en paramètre ;
- * - L'IP du périphérique ;
- * 
- * @param aState L'état transmis dans le flux Json.
- * @return Le succès de la transmission, ou pas.
- */
-  bool sendStatus(const String& aState) {
-    const String path = String(F("/device/GSM-")) + imei + F("/status");
-
-    String json(F("{\"timestamp\": \"")); 
-    json += getTimestamp();
-    json += F("\",\"status\":\"");
-    json += aState;
-    json += F("\",\"IP\":\"");
-    json += modem.getLocalIP();
-    json += F("\"}");
-
-    TinyGsmClient client(modem);
-    if (!client.connect(serverName.c_str(), serverPort)) {
-      DEBUG(F("No connection in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F("!"));
-      return false;
-    }
-
-    HttpClient http = HttpClient(client, serverName, serverPort);
-    int status;
-    
-    for (int i = 0; i < 3; ++i) {
-      const int err = http.put(path, String(F("application/json")), json);
-      if (err != 0) {
-        DEBUG(F("Error on PUT (")); DEBUG(err); DEBUG(F(")!\n"));
-        break;
-      }
-      status = http.responseStatusCode();
-      if (status <= 0) {
-        DEBUG(F("Internal error on PUT (")); DEBUG(status); DEBUG(F(")!\n'"));
-        delay(500);
-        continue; // un autre essai!
-      } else {
-        DEBUG(F("HTTP Response : ")); DEBUG(status); DEBUG('\n');
-        break;
-      }
-    }
-    if (status <= 0) return false;
-
-    while (!http.endOfHeadersReached()) {
-      if (http.headerAvailable()) {
-        const String name = http.readHeaderName();
-        const String value = http.readHeaderValue();
-        DEBUG(F("Header ")); DEBUG(name); DEBUG(':'); DEBUG(value); DEBUG('\n');
-      }
-    }
-    const String body = http.responseBody();
-    DEBUG(F("Body: ")); DEBUG(body); DEBUG('\n');
-
-    client.stop();
-    return true;    
-  }
   
-/**
- * Transmet un échantillon sample_t sérialisé sous la forme JSON d'un tableau d'un seul élément.
- * @param sample L'échantillon à traduire en JSON avant de le transmettre.
- * @return Le succès de la transmission, ou pas.
- */
-  bool sendSample(const sample_t& sample) {
-    return sendSamples(&sample, 1);
-  }
-
-/**
- * Transmet plusieurs échantillons sample_t sérialisés sous la forme JSON d'un tableau d'éléments.
- * @param samples Les échantillons à traduire en JSON avant de les transmettre. Tout le tableau est transmis.
- * @return Le succès de la transmission, ou pas.
- */
-  template<size_t N>
-  bool sendSamples(const sample_t (&samples)[N]) {
-    return sendSamples(samples, N);
-  };
-  
-/**
- * Transmet plusieurs échantillons sample_t sérialisés sous la forme JSON d'un tableau d'éléments.
- * @param samples Les échantillons à traduire en JSON avant de les transmettre.
- * @param n Le nombre d'échantillons du tableau à transmettre (premiers).
- * @return Le succès de la transmission, ou pas.
- */
-  bool sendSamples(const sample_t samples[], const size_t n) {
-    const String path = String(F("/device/GSM-")) + imei + F("/samples");
-
-    String json('[');
-    for (size_t i = 0; i < n; ++i) {
-      const sample_t& sample = samples[i];
-      json += (i ? F(",{") : F("{"));
-      json += F("\"epoch\":\"");
-      json += sample.epoch;
-      json += F("\",\"key\":\"");
-      json += sample.variable;
-      json += F("\",\"value\":\"");
-      json += String(sample.value);
-      json += F("\"}");
-    }
-    json += ']';
-    DEBUG(json); DEBUG('\n');
-
-    TinyGsmClient client(modem);;
-    if (!client.connect(serverName.c_str(), serverPort)) {
-      DEBUG(F("No connection in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F("!"));
-      return false;
-    }
-
-    HttpClient http = HttpClient(client, serverName, serverPort);
-    int status;
-    
-    for (int i = 0; i < 3; ++i) {
-      const int err = http.put(path, String(F("application/json")), json);
-      if (err != 0) {
-        DEBUG(F("Error on PUT (")); DEBUG(err); DEBUG(F(")!\n"));
-        break;
-      }
-      status = http.responseStatusCode();
-      if (status <= 0) {
-        DEBUG(F("Internal error on PUT (")); DEBUG(status); DEBUG(F(")!\n'"));
-        delay(500);
-        continue; // un autre essai!
-      } else {
-        DEBUG(F("HTTP Response : ")); DEBUG(status); DEBUG('\n');
-        break;
-      }
-    }
-    if (status <= 0) return false;
-    
-    while (!http.endOfHeadersReached()) {
-      if (http.headerAvailable()) {
-        const String name = http.readHeaderName();
-        const String value = http.readHeaderValue();
-        DEBUG(F("Header ")); DEBUG(name); DEBUG(':'); DEBUG(value); DEBUG('\n');
-      }
-    }
-    const String body = http.responseBody();
-    DEBUG(F("Body: ")); DEBUG(body); DEBUG('\n');
-
-    client.stop();
-    return true;    
-  }
-    
   
 /**
  * Retourne la date et l'heure maintenues par la RTC locale.
@@ -582,83 +312,6 @@ protected:
         }
         A[j+1] = x;
      }
-  }
-
-/**
- * Requete la liste des parametres.
- * 
- * @return Une chaîne JSON contenant chaque paramètre et sa valeur.
- */
-  bool getParameters() {
-    const String path = String(F("/device/GSM-")) + imei + F("/parameters");
-
-    TinyGsmClient client(modem);
-    if (!client.connect(serverName.c_str(), serverPort)) {
-      DEBUG(F("No connection in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F("!"));
-      return false;
-    }
-
-    HttpClient http = HttpClient(client, serverName, serverPort);
-    int status;
-    
-    for (int i = 0; i < 3; ++i) {
-      const int err = http.get(path);
-      if (err != 0) {
-        DEBUG(F("Error on GET (")); DEBUG(err); DEBUG(F(")!\n"));
-        break;
-      }
-      status = http.responseStatusCode();
-      if (status <= 0) {
-        DEBUG(F("Internal error on GET (")); DEBUG(status); DEBUG(F(")!\n'"));
-        delay(500);
-        continue; // un autre essai!
-      } else {
-        DEBUG(F("HTTP Response : ")); DEBUG(status); DEBUG('\n');
-        break;
-      }
-    }
-    if (status <= 0) return false;
-
-    while (!http.endOfHeadersReached()) {
-      if (http.headerAvailable()) {
-        const String name = http.readHeaderName();
-        const String value = http.readHeaderValue();
-        DEBUG(F("Header ")); DEBUG(name); DEBUG(':'); DEBUG(value); DEBUG('\n');
-
-        if (name.equalsIgnoreCase(F("Date"))) {
-          struct tm tm;
-          strptime(value.c_str(),"%a, %e %h %Y %H:%M:%S %z",&tm);
-          rtc.setTime(tm.tm_hour, tm.tm_min, tm.tm_sec);
-          rtc.setDate(tm.tm_mday, tm.tm_mon + 1, tm.tm_year % 100);
-        }
-      }
-    }
-    
-    const String body = http.responseBody();
-    DEBUG(F("Body: ")); DEBUG(body); DEBUG('\n');
-    client.stop();
-
-    DynamicJsonBuffer jsonBuffer(JSON_OBJECT_SIZE(6) + 60);
-    const JsonObject& root = jsonBuffer.parseObject(body);
-
-    if (root.containsKey("limit1R") && root.containsKey("hyst1R")) {
-      alert1 = Alert(root["limit1R"], root["hyst1R"]);
-    }
-    if (root.containsKey("limit2O") && root.containsKey("hyst2O")) {
-      alert2 = Alert(root["limit2O"], root["hyst2O"]);
-    }
-
-    startTime = root["start"];
-    stopTime = root["stop"];
-
-    if (root.containsKey("reset")) {
-      const String s = root["reset"];
-      const byte hh = s.toInt();
-      const byte mm = s.substring(s.indexOf(':')+1).toInt();
-      reset = hh * 60U + mm;
-    } else reset = -1;
-
-    return true;
   }
 
 /**
@@ -694,14 +347,7 @@ private:
   static App* pApp;
 
   Sensors sensors;
-
-  const __FlashStringHelper* GPRS_APN;
-  const __FlashStringHelper* GPRS_LOGIN;
-  const __FlashStringHelper* GPRS_PASSWORD;
-
-  TinyGsm modem;
-  const String serverName;
-  const unsigned serverPort;
+  Communication communication;
       
   static RTCZero rtc;
 
@@ -712,15 +358,6 @@ private:
     ECHO = 3,
     LED = 6,
     AM2302 = 0
-  };
-
-/**
- * Structure des éléments enregistrés dans la file d'attente des mesures.
- */
-  struct sample_t {
-    uint32_t epoch;
-    const __FlashStringHelper* variable;  // 
-    float value;
   };
 
 // Parameters
