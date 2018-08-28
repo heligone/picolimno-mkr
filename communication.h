@@ -24,10 +24,7 @@
 
 #pragma once
 
-#define TINY_GSM_MODEM_UBLOX
-// #define TINY_GSM_RX_BUFFER 512
-// #define TINY_GSM_TX_BUFFER 512
-#include <TinyGsmClient.h>
+#include <MKRGSM.h>
 #include <ArduinoHttpClient.h>
 
 // #define LOG 1
@@ -93,7 +90,7 @@ class Communication {
         return false;
       }
 
-      TinyGsmClient client(modem);
+      GSMClient client;
       
       const String server = serverName;
       HttpClient http = HttpClient(client, server, serverPort);
@@ -197,7 +194,7 @@ class Communication {
         return false;
       }
 
-      TinyGsmClient client(modem);
+      GSMClient client;
       
       const String server = serverName;
       HttpClient http = HttpClient(client, server, serverPort);
@@ -273,7 +270,7 @@ class Communication {
         return false;
       }
 
-      TinyGsmClient client(modem);
+      GSMClient client;
       
       const String server = serverName;
       HttpClient http = HttpClient(client, server, serverPort);
@@ -285,12 +282,13 @@ class Communication {
 
       char buffer[25];
       snprintf(buffer, sizeof(buffer), "%04d-%02d-%02dT%02d:%02d:%02dZ", 2000 + aRTC.getYear(), aRTC.getMonth(), aRTC.getDay(), aRTC.getHours(), aRTC.getMinutes(), aRTC.getSeconds() );
+      const IPAddress localIP = gprs.getIPAddress();
       String json(F("{\"timestamp\": \""));
       json += buffer;
       json += F("\",\"status\":\"");
       json += aState;
       json += F("\",\"IP\":\"");
-      json += modem.getLocalIP();
+      json += localIP;
       json += F("\"}");
       const String contentType(F("application/json"));
 
@@ -328,34 +326,18 @@ class Communication {
       return true;
     }
 
-    /**
-       Initialisation des composants de communication.
-    */
+/**
+ * Initialisation des composants de communication (modem UBlocs)
+ */
     void setup() {
-      // set serial baudrate
-      SerialGSM.begin(115200);
-      // hard resert
-      pinMode(GSM_RESETN, OUTPUT);
-      digitalWrite(GSM_RESETN, HIGH);
-      delay(100);
-      digitalWrite(GSM_RESETN, LOW);
-      delay(3000);
-
-      if (!modem.restart()) {
-        DEBUG(F("Error restarting modem!\n"));
+/// Tout est fait dans modem.begin()
+      DEBUG(F("Starting modem... "));
+      const int err = modem.begin();
+      if (1 != err) {
+        DEBUG(F("Error ")); DEBUG(err); DEBUG(F(" starting modem in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F("! Try to continue...\n"));
+      } else {
+        DEBUG(F("Ok.\n"));
       }
-
-      const String info = modem.getModemInfo();
-      DEBUG(F("- TinyGSM using ")); DEBUG(info); DEBUG('\n');
-
-      const String SCCID = modem.getSimCCID();
-      DEBUG(F("- Sim CCID ")); DEBUG(SCCID);
-      const SimStatus ss = modem.getSimStatus();
-      DEBUG(F(", Status ")); DEBUG(ss == 0 ? F("ERROR!") : ss == 1 ? F("READY.") : ss == 2 ? F("LOCKED!") : F("unknown!")); DEBUG('\n');
-
-      const int battLevel = modem.getBattPercent();
-      DEBUG("- Battery level: "); DEBUG(battLevel); DEBUG('\n');
-
     }
 
   protected:
@@ -378,11 +360,10 @@ class Communication {
        @param aPassword Une chaîne contenant la valeur du mot de passe de connexion.
     */
     Communication(const __FlashStringHelper aApn[], const __FlashStringHelper aLogin[], const __FlashStringHelper aPassword[], const __FlashStringHelper aServerName[], const int aServerPort) :
-#ifdef LOG
-      modem(debugger),
-#else
-      modem(SerialGSM),
-#endif
+      modem(),
+      gsm(),
+      gprs(),
+      
       apnName(aApn),
       apnLogin(aLogin),
       apnPassword(aPassword),
@@ -401,11 +382,20 @@ class Communication {
       DEBUG(F("Connect ")); DEBUG(aState); DEBUG(F("..."));
       switch (aState) {
         case IDLE :
-          for (int i = 0; i < aRetry; ++i) {
-            DEBUG(i + 1); DEBUG('/'); DEBUG(aRetry); DEBUG(',');
-            if (modem.isGprsConnected()) {
-              if (!modem.gprsDisconnect()) {
-                DEBUG(F("Can not disconnect from GPRS to go to IDLE!\n"));
+          for (byte i = 1; i <= aRetry; ++i) {
+            DEBUG(i); DEBUG('/'); DEBUG(aRetry); DEBUG(',');
+            if (GPRS_READY == gprs.status()) {
+              const GSM3_NetworkStatus_t st = gprs.detachGPRS();
+              if ((GSM_READY != st) || (IDLE != st)) {
+                DEBUG(F("Can not disconnect from GPRS in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F(", retry!\n"));
+                delay(500);
+                continue;
+              }
+            }
+            if (1 == gsm.isAccessAlive()) {
+              if (1 != gsm.lowPowerMode()) {
+                DEBUG(F("Can not turn \"low power mode\" on in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F(", retry!\n"));
+                delay(500);
                 continue;
               }
             }
@@ -416,27 +406,51 @@ class Communication {
         case GSM_CONNECTION :
           for (int i = 0; i < aRetry; ++i) {
             DEBUG(i+1); DEBUG('/'); DEBUG(aRetry); DEBUG(',');
-            if (modem.isNetworkConnected()) {
-              if (aState == GSM_CONNECTION_ONLY) {
-                if (modem.isGprsConnected() && modem.gprsDisconnect()) return true;
-              } else {
-                return true;
-              }
-            } else {  // not yet connected
-              if (!modem.waitForNetwork()) {
-                DEBUG(F("Error in waitForNetwork()\n"));
-                delay(500);
-                continue;
-              }
-              if (!modem.isNetworkConnected()) {
-                DEBUG(F("Error in waitForNetwork()\n"));
+            if ((GPRS_READY == gprs.status()) && (aState == GSM_CONNECTION_ONLY)) { // need GPRS deconnection ?
+              const GSM3_NetworkStatus_t st = gprs.detachGPRS();
+              if ((GSM_READY != st) || (IDLE != st)) {
+                DEBUG(F("Can not disconnect from GPRS in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F(", retry!\n"));
                 delay(500);
                 continue;
               }
             }
-
-            DEBUG(F("connected with Operator ")); DEBUG(modem.getOperator());
-            DEBUG(F(",Signal ")); DEBUG(modem.getSignalQuality()); DEBUG('\n');
+            
+            if (1 != gsm.isAccessAlive()) {  // not yet connected
+              if (1 != gsm.noLowPowerMode()) {
+                DEBUG(F("Can not turn \"low power mode\" off in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F(", retry!\n"));
+                delay(500);
+                continue;
+              }
+              DEBUG("try begin\n");
+              gsm.begin(NULL, true, false);
+              while ((0 == gsm.ready()) || (0 == gsm.isAccessAlive())) {
+                const int r = gsm.ready();
+                const int s = gsm.isAccessAlive();
+                DEBUG("Waiting : "); DEBUG(r); DEBUG(','); DEBUG(s); DEBUG("\n");
+                delay(1000);
+              }
+/*
+              DEBUG("Begin return : "); DEBUG(st); DEBUG("\n");
+              if (ERROR == st) {
+                DEBUG(F("Can not begin GMS in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F(", retry!\n"));
+                delay(500);
+                continue;
+              }
+*/
+              if (1 != gsm.isAccessAlive()) {
+                DEBUG(F("GMS is not alive in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F(", retry!\n"));
+                delay(500);
+                continue;
+              } 
+            }
+            GSMScanner scanner;
+            const GSM3_NetworkStatus_t st = scanner.begin();
+            if (ERROR == st) {
+                DEBUG(F("Can not begin GSMScanner in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F(", continue!\n"));
+                return true;
+            }
+            DEBUG(F("connected with Operator ")); DEBUG(scanner.getCurrentCarrier());
+            DEBUG(F(",Signal ")); DEBUG(scanner.getSignalStrength()); DEBUG('\n');
 
             return true;
           }
@@ -444,35 +458,44 @@ class Communication {
         case GPRS_CONNECTION :
           for (int i = 0; i < aRetry; ++i) {
             DEBUG(i + 1); DEBUG('/'); DEBUG(aRetry); DEBUG(',');
-            if (modem.isGprsConnected()) return true;
+            if (GPRS_READY == gprs.status()) return true;
 
-            if (!modem.isNetworkConnected()) {
-              if (!modem.waitForNetwork()) {
-                DEBUG(F("Error in waitForNetwork()!\n"));
+            if (1 != gsm.isAccessAlive()) {  // not yet connected
+              if (1 != gsm.noLowPowerMode()) {
+                DEBUG(F("Can not turn \"low power mode\" off in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F(", retry!\n"));
                 delay(500);
                 continue;
               }
-              if (!modem.isNetworkConnected()) {
-                DEBUG(F("Still not Network Connected!\n"));
+              const GSM3_NetworkStatus_t st = gsm.begin();
+              if (ERROR == st) {
+                DEBUG(F("Can not begin GMS in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F(", retry!\n"));
                 delay(500);
                 continue;
               }
-            }   // connected now
+              if (1 != gsm.isAccessAlive()) {
+                DEBUG(F("GMS is not alive in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F(", retry!\n"));
+                delay(500);
+                continue;
+              } 
+            }
 
             const String name(apnName);
             const String login(apnLogin);
             const String password(apnPassword);
 
-            if (!modem.gprsConnect(name.c_str(), password.c_str())) {
-              DEBUG(F("Error in gprsConnect("));
-              DEBUG(name); DEBUG(','); DEBUG(login); DEBUG(','); DEBUG(password); DEBUG(F(")\n"));
+            const GSM3_NetworkStatus_t st = gprs.attachGPRS(name.c_str(), login.c_str(), password.c_str());
+            if (GPRS_READY != st) {
+              DEBUG(F("Can not attachGPR("));
+              DEBUG(name); DEBUG(','); DEBUG(login); DEBUG(','); DEBUG(password); DEBUG(F(") in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F(", retry!\n"));
               delay(500);
               continue;
-            }
-            if (!modem.isGprsConnected()) {
-              DEBUG(F("Still not GPRS connected!\n"));
-              delay(500);
-              continue;
+            } else {
+              const GSM3_NetworkStatus_t st = gprs.status();
+              if (GPRS_READY != st) {
+                DEBUG(F("Still not GPRS connected!\n"));
+                delay(500);
+                continue;
+              }
             } // GPRS connected now
 
             return true;
@@ -482,47 +505,12 @@ class Communication {
       return false;
     }
 
-    /*
-
-        DEBUG(F("Waiting for network... "));
-        if (!modem.waitForNetwork()) {
-          DEBUG(F("Not found!\n"));
-          return false;
-        }
-
-        if (modem.isNetworkConnected()) {
-          DEBUG(F("connected with Operator "));
-          DEBUG(modem.getOperator());
-          DEBUG(F(",Signal "));
-          DEBUG(modem.getSignalQuality());
-          DEBUG('\n');
-        }
-
-        DEBUG(F("GPRS (")); DEBUG(apn); DEBUG(F(")...\n"));
-        bool ok;
-        for (byte i = 0; i < retry; ++i) {
-          ok = modem.gprsConnect(apn.c_str(), login.c_str(), password.c_str());
-          if (!ok) {
-            DEBUG(F("fail, "));
-            delay(500);
-          } else {
-            DEBUG(F("OK\n"));
-            break;
-          }
-        }
-        if (!ok) {
-          DEBUG(F("Not found!\n"));
-          return false;
-        }
-
-        return true;  // Connexion avec succès
-      }
-    */
-
   private:
     static Communication* pCommunication;
 
-    mutable TinyGsm modem;    ///< Instance modifiable sans rompre le const de la méthode utilisant cet attribut.
+    mutable GSMModem modem;     ///< Instance modifiable sans rompre le const de la méthode utilisant cet attribut.
+    mutable GSM gsm;
+    mutable GPRS gprs;
 
     const __FlashStringHelper* apnName;
     const __FlashStringHelper* apnLogin;

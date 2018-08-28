@@ -41,7 +41,7 @@
 #define INTERVAL_MESURES (15)
 
 /// Temps en seconde entre deux transmissions.
-#define INTERVAL_TRANSMISSION (15*60)
+#define INTERVAL_TRANSMISSION (1*60)
 
 /// Nombre d'échantillons matériels nécessaires pour faire un échantillon brut après médiane (minimum sinon l'échantillon est invalide).
 #define RANGE_SEQ_MIN 20

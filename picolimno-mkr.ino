@@ -45,7 +45,7 @@ App& app = App::getInstance(F(APN_NAME), F(APN_USERNAME), F(APN_PASSWORD));
 
 void setup() {
   Serial.begin(115200);
-  Serial1.begin(57600);
+//  Serial1.begin(57600);
 //  while (!Serial) ;
   delay(5000);
 
