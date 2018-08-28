@@ -386,7 +386,7 @@ class Communication {
             DEBUG(i); DEBUG('/'); DEBUG(aRetry); DEBUG(',');
             if (GPRS_READY == gprs.status()) {
               const GSM3_NetworkStatus_t st = gprs.detachGPRS();
-              if ((GSM_READY != st) || (IDLE != st)) {
+              if ((GSM3_NetworkStatus_t::GSM_READY != st) || (GSM3_NetworkStatus_t::IDLE != st)) {
                 DEBUG(F("Can not disconnect from GPRS in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F(", retry!\n"));
                 delay(500);
                 continue;
@@ -408,7 +408,7 @@ class Communication {
             DEBUG(i+1); DEBUG('/'); DEBUG(aRetry); DEBUG(',');
             if ((GPRS_READY == gprs.status()) && (aState == GSM_CONNECTION_ONLY)) { // need GPRS deconnection ?
               const GSM3_NetworkStatus_t st = gprs.detachGPRS();
-              if ((GSM_READY != st) || (IDLE != st)) {
+              if ((GSM3_NetworkStatus_t::GSM_READY != st) || (GSM3_NetworkStatus_t::IDLE != st)) {
                 DEBUG(F("Can not disconnect from GPRS in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F(", retry!\n"));
                 delay(500);
                 continue;
