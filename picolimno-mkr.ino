@@ -25,7 +25,7 @@
 #define DEBUG_BUILD 1
 
 #ifdef DEBUG_BUILD
-#  define DEBUG(x) do { Serial.print(x); } while(0)
+#  define DEBUG(x) do { Serial.print(x); Serial1.print(x);  } while(0)
 #else
 #  define DEBUG(x) do {} while (0)
 #endif
@@ -49,20 +49,20 @@ void setup() {
 //  while (!Serial) ;
   delay(5000);
 
-  Serial.println(F(__FILE__));
-  Serial.print(F("Compiled on ")); Serial.print(F(__DATE__)); 
-  Serial.print(F(" at ")); Serial.print(F(__TIME__));
-  Serial.print(F(" for ")); Serial.println(F(USB_PRODUCT));
+  DEBUG(F(__FILE__)); DEBUG(F("\n"));
+  DEBUG(F("Compiled on ")); DEBUG(F(__DATE__)); DEBUG(F("\n"));
+  DEBUG(F(" at ")); DEBUG(F(__TIME__)); DEBUG(F("\n"));
+  DEBUG(F(" for ")); DEBUG(F(USB_PRODUCT)); DEBUG(F("\n"));
 
   if (!app.setup()) {
-    Serial.println(F("Error in App::Setup!"));
+    DEBUG(F("Error in App::Setup!")); DEBUG(F("\n"));
     exit(0);
   }
 }
 
 void loop() {
   if (!app.loop()) {
-    Serial.println(F("Error in App::Loop!"));
+    DEBUG(F("Error in App::Loop!")); DEBUG(F("\n"));
     exit(0);
   }
 }

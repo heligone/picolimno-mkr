@@ -37,11 +37,11 @@
 #include "alert.h"
 #include "communication.h"
 
-/// Temps en secondes entre deux mesures de distance.
-#define INTERVAL_MESURES (15)
+/// Temps en minutes entre deux mesures de distance.
+#define INTERVAL_MESURES (1)
 
 /// Temps en seconde entre deux transmissions.
-#define INTERVAL_TRANSMISSION (15*60)
+#define INTERVAL_TRANSMISSION (1*60)
 
 /// Nombre d'échantillons matériels nécessaires pour faire un échantillon brut après médiane (minimum sinon l'échantillon est invalide).
 #define RANGE_SEQ_MIN 20
@@ -88,6 +88,7 @@ public:
     DEBUG(F("- Transmission des valeurs regroupees par trames (GRANDES).\n"));
 #endif
 
+    DEBUG(F("-------------\n"));
     DEBUG(F("Communication setup\n"));
     communication.setup();
 
@@ -103,7 +104,7 @@ public:
     DEBUG('\n');
 
 // Sending Status
-    DEBUG(F("Sending Status Starting\n"));
+    DEBUG(F("Sending Initial Status Starting\n"));
     if (!communication.sendStatus(rtc, F("Starting"), imei)) {
       DEBUG(F("Echec de transmission. Poursuite !\n"));
     }
