@@ -23,6 +23,7 @@
 */
 
 #define DEBUG_BUILD true
+// #define DEBUG_BUILD false
 
 #define DEBUG(x) if (DEBUG_BUILD) { Serial.print(x); /* Serial1.print(x); */ }
 #define DEBUGLN(x) if (DEBUG_BUILD) { Serial.println(x); /* Serial1.print(x); */ }

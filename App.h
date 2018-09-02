@@ -30,7 +30,7 @@
 #include <cassert>
 
 /// @warning
-/// ATTENTION FONCTIONNE SEULEMENT AVEC LA v5.13.1 (un problème sur le 5.13.2 que je n'ai pas investigué)
+/// ATTENTION FONCTIONNE SEULEMENT AVEC LA v5.13.2 (Ne pas upgrader vers la v6)
 #include <ArduinoJson.h>
 
 #include "sensors.h"
@@ -89,12 +89,18 @@ public:
 #endif
 
     DEBUG(F("-------------\n"));
+
+    DEBUGLN(F("Watchdog setup"));
+    setupWatchdog(WDT_CONFIG_PER_16K);  // about 16 sec.
+    
     DEBUG(F("Communication setup\n"));
+    resetWatchdog();
     communication.setup();
 
     imei = communication.getIMEI();
     DEBUG(F("DeviceID: GSM-")); DEBUG(imei); DEBUG('\n');
 
+    resetWatchdog();
     rtc.begin();
 
 // Get Parameters & datetime
@@ -140,6 +146,7 @@ public:
  * @return boolean value to indicate if execution was right or not. A faulty exec. means the program can't continue and should be aborted.
  */
   bool loop() {
+    resetWatchdog();  
 //    rtc.standbyMode();
     
 // Si on a détecté un changement de minute
@@ -343,6 +350,42 @@ protected:
     DEBUG(F("Distance : ")); DEBUG(distance / 10.0f); DEBUG(F(" - Ech. : ")); DEBUG(n); DEBUG('\n');
     return distance;
   }
+
+/**
+ * Set up the generic clock (GCLK2) used to clock the watchdog timer at 1.024kHz.
+ * 
+ * @param aConfig divider, default WDT_CONFIG_PER_1K (about 1 sec.)
+ */
+  void setupWatchdog(const unsigned aConfig = WDT_CONFIG_PER_1K) const {
+ // 
+    REG_GCLK_GENDIV = GCLK_GENDIV_DIV(4) |            // Divide the 32.768kHz clock source by divisor 32, where 2^(4 + 1): 32.768kHz/32=1.024kHz
+                      GCLK_GENDIV_ID(2);              // Select Generic Clock (GCLK) 2
+    while (GCLK->STATUS.bit.SYNCBUSY);                // Wait for synchronization
+  
+    REG_GCLK_GENCTRL = GCLK_GENCTRL_DIVSEL |          // Set to divide by 2^(GCLK_GENDIV_DIV(4) + 1)
+                       GCLK_GENCTRL_IDC |             // Set the duty cycle to 50/50 HIGH/LOW
+                       GCLK_GENCTRL_GENEN |           // Enable GCLK2
+                       GCLK_GENCTRL_SRC_OSCULP32K |   // Set the clock source to the ultra low power oscillator (OSCULP32K)
+                       GCLK_GENCTRL_ID(2);            // Select GCLK2         
+    while (GCLK->STATUS.bit.SYNCBUSY);                // Wait for synchronization
+  
+    // Feed GCLK2 to WDT (Watchdog Timer)
+    REG_GCLK_CLKCTRL = GCLK_CLKCTRL_CLKEN |           // Enable GCLK2 to the WDT
+                       GCLK_CLKCTRL_GEN_GCLK2 |       // Select GCLK2
+                       GCLK_CLKCTRL_ID_WDT;           // Feed the GCLK2 to the WDT
+    while (GCLK->STATUS.bit.SYNCBUSY);                // Wait for synchronization
+  
+    REG_WDT_CONFIG = aConfig;                         // Set the WDT reset timeout to 1 second
+    while(WDT->STATUS.bit.SYNCBUSY);                  // Wait for synchronization
+    REG_WDT_CTRL = WDT_CTRL_ENABLE;                   // Enable the WDT in normal mode
+    while(WDT->STATUS.bit.SYNCBUSY);                  // Wait for synchronization
+  }
+
+  inline void resetWatchdog() const {
+    if (!WDT->STATUS.bit.SYNCBUSY) {                  // Check if the WDT registers are synchronized
+      REG_WDT_CLEAR = WDT_CLEAR_CLEAR_KEY;            // Clear the watchdog timer
+    }
+  }
  
 private:
   static App* pApp;
@@ -374,4 +417,3 @@ private:
 App* App::pApp;
 RTCZero App::rtc;
 volatile bool App::fIntTimer;
-

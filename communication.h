@@ -45,20 +45,20 @@
 class Communication {
 
   public:
-    /**
-       Structure des éléments enregistrés dans la file d'attente des mesures.
-    */
+/**
+ * Structure des éléments enregistrés dans la file d'attente des mesures.
+ */
     struct sample_t {
       uint32_t epoch;
       const __FlashStringHelper* variable;  //
       float value;
     };
 
-    /**
-       Factory for singleton GSM.
-
-       @return the only one (singleton) App instance.
-    */
+/**
+ * Factory for singleton GSM.
+ * 
+ * @return the only one (singleton) App instance.
+ */
     static Communication& getInstance(const __FlashStringHelper aApn[], const __FlashStringHelper aLogin[], const __FlashStringHelper aPassword[], const __FlashStringHelper aServerName[], const int aServerPort) {
       if (!pCommunication) {
         pCommunication = new Communication(aApn, aLogin, aPassword, aServerName, aServerPort);
@@ -66,11 +66,11 @@ class Communication {
       return *pCommunication;
     }
 
-    /**
-       Retourne l'IMEI de la carte.
-
-       @return Une chaîne contenant l'IMEI.
-    */
+/**
+ * Retourne l'IMEI de la carte.
+ * 
+ * @return Une chaîne contenant l'IMEI.
+ */
     String getIMEI() const {
       if (connectGSMGPRS(GSM_CONNECTION)) {
         return modem.getIMEI();
@@ -80,13 +80,13 @@ class Communication {
       }
     }
 
-    /**
-       Requète la liste des paramètres et place les réponses dans les paramètres transmis en référence.
-
-       @param aIMEI Une chaîne contenant le numéro IMEI du device.
-       @param aRtc Une structure contenant l'heure pour mise à jour à partir de la réponse.
-       @return Une chaîne JSON contenant chaque paramètre et sa valeur.
-    */
+/**
+ * Requète la liste des paramètres et place les réponses dans les paramètres transmis en référence.
+ * 
+ * @param aIMEI Une chaîne contenant le numéro IMEI du device.
+ * @param aRtc Une structure contenant l'heure pour mise à jour à partir de la réponse.
+ * @return Une chaîne JSON contenant chaque paramètre et sa valeur.
+ **/
     bool getParameters(const String aIMEI, RTCZero& rtc, Alert& alert1, Alert& alert2, byte& startTime, byte& stopTime, int& reset) const {
       if (!connectGSMGPRS(GPRS_CONNECTION)) {
         DEBUG(F("No success connecting GPRS and getting parameters in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F("!\n"));
@@ -166,31 +166,34 @@ class Communication {
       return true;
     }
 
-    /**
-       Transmet un échantillon sample_t sérialisé sous la forme JSON d'un tableau d'un seul élément.
-       @param sample L'échantillon à traduire en JSON avant de le transmettre.
-       @return Le succès de la transmission, ou pas.
-    */
+/**
+ * Transmet un échantillon sample_t sérialisé sous la forme JSON d'un tableau d'un seul élément.
+ *       
+ * @param sample L'échantillon à traduire en JSON avant de le transmettre.
+ * @return Le succès de la transmission, ou pas.
+ */
     bool sendSample(const sample_t& sample, const String& aIMEI) const {
       return sendSamples(&sample, 1, aIMEI);
     }
 
-    /**
-       Transmet plusieurs échantillons sample_t sérialisés sous la forme JSON d'un tableau d'éléments.
-       @param samples Les échantillons à traduire en JSON avant de les transmettre. Tout le tableau est transmis.
-       @return Le succès de la transmission, ou pas.
-    */
+/**
+ * Transmet plusieurs échantillons sample_t sérialisés sous la forme JSON d'un tableau d'éléments.
+ * 
+ * @param samples Les échantillons à traduire en JSON avant de les transmettre. Tout le tableau est transmis.
+ * @return Le succès de la transmission, ou pas.
+ */
     template<size_t N>
     bool sendSamples(const sample_t (&samples)[N], const String& aIMEI) const {
       return sendSamples(samples, N, aIMEI);
     }
 
-    /**
-       Transmet plusieurs échantillons sample_t sérialisés sous la forme JSON d'un tableau d'éléments.
-       @param samples Les échantillons à traduire en JSON avant de les transmettre.
-       @param n Le nombre d'échantillons du tableau à transmettre (premiers).
-       @return Le succès de la transmission, ou pas.
-    */
+/**
+ * Transmet plusieurs échantillons sample_t sérialisés sous la forme JSON d'un tableau d'éléments.
+ * 
+ * @param samples Les échantillons à traduire en JSON avant de les transmettre.
+ * @param n Le nombre d'échantillons du tableau à transmettre (premiers).
+ * @return Le succès de la transmission, ou pas.
+ */
     bool sendSamples(const sample_t samples[], const size_t n, const String& aIMEI) const {
       if (!connectGSMGPRS(GPRS_CONNECTION)) {
         DEBUG(F("No success connecting GPRS and sending samples in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F("!\n"));
@@ -258,15 +261,15 @@ class Communication {
       return true;
     }
 
-    /**
-       Transmet l'état du device sous la forme d'un flux Json qui contient le statut ainsi que d'autres éléments :
-       - L'heure mémorisée au moment de la transmission ;
-       - L'état tel que passé en paramètre ;
-       - L'IP du périphérique ;
-
-       @param aState L'état transmis dans le flux Json.
-       @return Le succès de la transmission, ou pas.
-    */
+/**
+ * Transmet l'état du device sous la forme d'un flux Json qui contient le statut ainsi que d'autres éléments :
+ *  - L'heure mémorisée au moment de la transmission ;
+ *  - L'état tel que passé en paramètre ;
+ *  - L'IP du périphérique ;
+ *  
+ *  @param aState L'état transmis dans le flux Json.
+ *  @return Le succès de la transmission, ou pas.
+ **/
     bool sendStatus(RTCZero& aRTC, const String& aState, const String& aIMEI) const {
       if (!connectGSMGPRS(GPRS_CONNECTION)) {
         DEBUG(F("No success connecting GPRS and sending status in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F("!\n"));
@@ -328,40 +331,43 @@ class Communication {
       return true;
     }
 
-    /**
-       Initialisation des composants de communication.
-    */
+/**
+ * Initialisation des composants de communication.
+ **/
     void setup() {
       // set serial baudrate
       SerialGSM.begin(115200);
+
+/*      
       // hard resert
       pinMode(GSM_RESETN, OUTPUT);
       digitalWrite(GSM_RESETN, HIGH);
       delay(100);
       digitalWrite(GSM_RESETN, LOW);
       delay(3000);
+      resetWatchdog();
 
       if (!modem.restart()) {
-        DEBUG(F("Error restarting modem!\n"));
+        DEBUGLN(F("Error restarting modem!"));
       }
 
       const String info = modem.getModemInfo();
-      DEBUG(F("- TinyGSM using ")); DEBUG(info); DEBUG('\n');
+      DEBUG(F("- TinyGSM using ")); DEBUGLN(info);
 
       const String SCCID = modem.getSimCCID();
       DEBUG(F("- Sim CCID ")); DEBUG(SCCID);
       const SimStatus ss = modem.getSimStatus();
-      DEBUG(F(", Status ")); DEBUG(ss == 0 ? F("ERROR!") : ss == 1 ? F("READY.") : ss == 2 ? F("LOCKED!") : F("unknown!")); DEBUG('\n');
+      DEBUG(F(", Status ")); DEBUGLN(ss == 0 ? F("ERROR!") : ss == 1 ? F("READY.") : ss == 2 ? F("LOCKED!") : F("unknown!"));
 
       const int battLevel = modem.getBattPercent();
-      DEBUG("- Battery level: "); DEBUG(battLevel); DEBUG('\n');
-
+      DEBUG("- Battery level: "); DEBUGLN(battLevel);
+*/      
     }
 
   protected:
-    /**
-       Etats possible de la connexion GSM.
-    */
+/**
+ * États possibles de la connexion GSM.
+ **/
     enum state_t {
       IDLE,                 ///< Non connecté
       GSM_CONNECTION_ONLY,  ///< Connexion GSM only
@@ -369,14 +375,14 @@ class Communication {
       GPRS_CONNECTION       ///< Connexion GSM & GPRS
     };
 
-    /**
-       Constructeur de l'instance.
-       Il est protégé pour n'être utilisé que par la Factory (singleton).
-
-       @param aApn Une chaîne contenant la valeur de l'APN.
-       @param aLogin Une chaîne contenant la valeur du compte de connexion.
-       @param aPassword Une chaîne contenant la valeur du mot de passe de connexion.
-    */
+/**
+ * Constructeur de l'instance.
+ * Il est protégé pour n'être utilisé que par la Factory (singleton).
+ * 
+ * @param aApn Une chaîne contenant la valeur de l'APN.
+ * @param aLogin Une chaîne contenant la valeur du compte de connexion.
+ * @param aPassword Une chaîne contenant la valeur du mot de passe de connexion.
+ **/
     Communication(const __FlashStringHelper aApn[], const __FlashStringHelper aLogin[], const __FlashStringHelper aPassword[], const __FlashStringHelper aServerName[], const int aServerPort) :
 #ifdef LOG
       modem(debugger),
@@ -390,14 +396,15 @@ class Communication {
       serverPort(aServerPort)
     {}
 
-    /**
-       Connecte, déconnecte ou reconnecte le GSM et/ou le GPRS selon les besoins.
-
-       @param state État demandé (IDLE, GSM_CONNECTION, GPRS_CONNECTION).
-       @param retry Nombre de réessais pour obtenir l'état demandé, 10 par défaut.
-       @return L'état de la connexion, true si ok, false en cas d'erreur.
-    */
+/**
+ * Connecte, déconnecte ou reconnecte le GSM et/ou le GPRS selon les besoins.
+ * 
+ * @param state État demandé (IDLE, GSM_CONNECTION, GPRS_CONNECTION).
+ * @param retry Nombre de réessais pour obtenir l'état demandé, 10 par défaut.
+ * @return L'état de la connexion, true si ok, false en cas d'erreur.
+ **/
     bool connectGSMGPRS(const state_t aState, const byte aRetry = 10) const {
+      resetWatchdog();
       DEBUG(F("Connect")); 
       //DEBUG(aState);
       DEBUG(F("..."));
@@ -422,147 +429,36 @@ class Communication {
     // Unlock your SIM card with a PIN
     //modem.simUnlock("1234");
   
+    resetWatchdog();
     DEBUG(F("Waiting for GSM network..."));
     if (!modem.waitForNetwork()) {
       DEBUG(" GSM fail"); DEBUG(F("\n"));
       delay(10000);
-      return 0;
+      return false;
     }
     DEBUG("GSM OK"); DEBUG(F("\n"));
   
+    resetWatchdog();
     DEBUG(F("Connecting to "));
     DEBUG(APN_NAME); DEBUG(F("..."));
     if (!modem.gprsConnect(APN_NAME, APN_USERNAME, APN_PASSWORD)) {
       DEBUG(F("GPRS fail ! ")); DEBUG(F("\n"));
       delay(10000);
-      return 0;
+      return false;
     }
     DEBUG("GPRS OK"); DEBUG(F("\n"));
 
     DEBUG(F("connected with Operator ")); DEBUG(modem.getOperator());
     DEBUG(F(",Signal ")); DEBUG(modem.getSignalQuality()); DEBUG('\n');
 
-    /*
-          switch (aState) {
-            case IDLE :
-              for (int i = 0; i < aRetry; ++i) {
-                DEBUG(i + 1); DEBUG('/'); DEBUG(aRetry); DEBUG(',');
-                if (modem.isGprsConnected()) {
-                  if (!modem.gprsDisconnect()) {
-                    DEBUG(F("Can not disconnect from GPRS to go to IDLE!\n"));
-                    continue;
-                  }
-                }
-                return true;
-              }
-              break;
-            case GSM_CONNECTION_ONLY :
-            case GSM_CONNECTION :
-              for (int i = 0; i < aRetry; ++i) {
-                DEBUG(i+1); DEBUG('/'); DEBUG(aRetry); DEBUG(',');
-                if (modem.isNetworkConnected()) {
-                  if (aState == GSM_CONNECTION_ONLY) {
-                    if (modem.isGprsConnected() && modem.gprsDisconnect()) return true;
-                  } else {
-                    return true;
-                  }
-                } else {  // not yet connected
-                  if (!modem.waitForNetwork()) {
-                    DEBUG(F("Error in waitForNetwork()\n"));
-                    delay(500);
-                    continue;
-                  }
-                  if (!modem.isNetworkConnected()) {
-                    DEBUG(F("Error in waitForNetwork()\n"));
-                    delay(500);
-                    continue;
-                  }
-                }
-    
-                DEBUG(F("connected with Operator ")); DEBUG(modem.getOperator());
-                DEBUG(F(",Signal ")); DEBUG(modem.getSignalQuality()); DEBUG('\n');
-    
-                return true;
-              }
-              break;
-            case GPRS_CONNECTION :
-              for (int i = 0; i < aRetry; ++i) {
-                DEBUG(i + 1); DEBUG('/'); DEBUG(aRetry); DEBUG(',');
-                if (modem.isGprsConnected()) return true;
-    
-                if (!modem.isNetworkConnected()) {
-                  if (!modem.waitForNetwork()) {
-                    DEBUG(F("Error in waitForNetwork()!\n"));
-                    delay(500);
-                    continue;
-                  }
-                  if (!modem.isNetworkConnected()) {
-                    DEBUG(F("Still not Network Connected!\n"));
-                    delay(500);
-                    continue;
-                  }
-                }   // connected now
-    
-                const String name(apnName);
-                const String login(apnLogin);
-                const String password(apnPassword);
-    
-                if (!modem.gprsConnect(name.c_str(), password.c_str())) {
-                  DEBUG(F("Error in gprsConnect("));
-                  DEBUG(name); DEBUG(','); DEBUG(login); DEBUG(','); DEBUG(password); DEBUG(F(")\n"));
-                  delay(500);
-                  continue;
-                }
-                if (!modem.isGprsConnected()) {
-                  DEBUG(F("Still not GPRS connected!\n"));
-                  delay(500);
-                  continue;
-                } // GPRS connected now
-    
-                return true;
-              }
-              break;
-          }
-          return false;
-          */
+    return true;
+  }
+
+  inline void resetWatchdog() const {
+    if (!WDT->STATUS.bit.SYNCBUSY) {                  // Check if the WDT registers are synchronized
+      REG_WDT_CLEAR = WDT_CLEAR_CLEAR_KEY;            // Clear the watchdog timer
     }
-
-    /*
-
-        DEBUG(F("Waiting for network... "));
-        if (!modem.waitForNetwork()) {
-          DEBUG(F("Not found!\n"));
-          return false;
-        }
-
-        if (modem.isNetworkConnected()) {
-          DEBUG(F("connected with Operator "));
-          DEBUG(modem.getOperator());
-          DEBUG(F(",Signal "));
-          DEBUG(modem.getSignalQuality());
-          DEBUG('\n');
-        }
-
-        DEBUG(F("GPRS (")); DEBUG(apn); DEBUG(F(")...\n"));
-        bool ok;
-        for (byte i = 0; i < retry; ++i) {
-          ok = modem.gprsConnect(apn.c_str(), login.c_str(), password.c_str());
-          if (!ok) {
-            DEBUG(F("fail, "));
-            delay(500);
-          } else {
-            DEBUG(F("OK\n"));
-            break;
-          }
-        }
-        if (!ok) {
-          DEBUG(F("Not found!\n"));
-          return false;
-        }
-
-        return true;  // Connexion avec succès
-      }
-    */
+  }
 
   private:
     static Communication* pCommunication;
