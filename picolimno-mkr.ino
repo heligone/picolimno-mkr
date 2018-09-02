@@ -22,13 +22,21 @@
     @version 1.0 25/02/2018
 */
 
-#define DEBUG_BUILD 1
+#define DEBUG_BUILD true
 
-#ifdef DEBUG_BUILD
-#  define DEBUG(x) do { Serial.print(x); Serial1.print(x);  } while(0)
-#else
-#  define DEBUG(x) do {} while (0)
-#endif
+#define DEBUG(x) if (DEBUG_BUILD) { Serial.print(x); /* Serial1.print(x); */ }
+#define DEBUGLN(x) if (DEBUG_BUILD) { Serial.println(x); /* Serial1.print(x); */ }
+
+// #ifdef DEBUG_BUILD
+// #  define DEBUG(x) do { Serial.print(x); /* Serial1.print(x); */ } while(0)
+// #  define DEBUGLN(x) do { Serial.println(x); /* Serial1.println(x); */ } while(0)
+// #else
+// #  define DEBUG(x) do {} while (0)
+// #  define DEBUGLN(x) do {} while (0)
+// #endif
+
+#define PRINT(x) if (true) { Serial.print(x); /* Serial1.print(x); */ }
+#define PRINTLN(x) if (true) { Serial.println(x); /* Serial1.print(x); */ }
 
 #include "secrets.h"
 /** 
@@ -45,24 +53,24 @@ App& app = App::getInstance(F(APN_NAME), F(APN_USERNAME), F(APN_PASSWORD));
 
 void setup() {
   Serial.begin(115200);
-  Serial1.begin(57600);
+//  Serial1.begin(57600);
 //  while (!Serial) ;
   delay(5000);
 
-  DEBUG(F(__FILE__)); DEBUG(F("\n"));
-  DEBUG(F("Compiled on ")); DEBUG(F(__DATE__)); DEBUG(F("\n"));
-  DEBUG(F(" at ")); DEBUG(F(__TIME__)); DEBUG(F("\n"));
-  DEBUG(F(" for ")); DEBUG(F(USB_PRODUCT)); DEBUG(F("\n"));
+  PRINTLN(F(__FILE__));
+  PRINT(F("Compiled on ")); PRINTLN(F(__DATE__));
+  PRINT(F(" at ")); PRINTLN(F(__TIME__));
+  PRINT(F(" for ")); PRINTLN(F(USB_PRODUCT));
 
   if (!app.setup()) {
-    DEBUG(F("Error in App::Setup!")); DEBUG(F("\n"));
+    PRINTLN(F("Error in App::Setup!"));
     exit(0);
   }
 }
 
 void loop() {
   if (!app.loop()) {
-    DEBUG(F("Error in App::Loop!")); DEBUG(F("\n"));
+    PRINTLN(F("Error in App::Loop!"));
     exit(0);
   }
 }

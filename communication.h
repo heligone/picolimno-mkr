@@ -30,7 +30,7 @@
 #include <TinyGsmClient.h>
 #include <ArduinoHttpClient.h>
 
-#define LOG 1
+// #define LOG 1
 #ifdef LOG
   #include <StreamDebugger.h>
   StreamDebugger debugger(SerialGSM, Serial);
@@ -577,4 +577,3 @@ class Communication {
 };
 
 Communication* Communication::pCommunication;
-
