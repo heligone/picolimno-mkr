@@ -41,7 +41,7 @@
 #define INTERVAL_MESURES (1)
 
 /// Temps en seconde entre deux transmissions.
-#define INTERVAL_TRANSMISSION (1*60)
+#define INTERVAL_TRANSMISSION (2*60)
 
 /// Nombre d'échantillons matériels nécessaires pour faire un échantillon brut après médiane (minimum sinon l'échantillon est invalide).
 #define RANGE_SEQ_MIN 20
@@ -98,7 +98,7 @@ public:
     rtc.begin();
 
 // Get Parameters & datetime
-    DEBUG(F("Get parameters..."));
+    DEBUG(F("Get parameters...")); DEBUG(F("\n"));
     const bool ok = communication.getParameters(imei, rtc, alert1, alert2, startTime, stopTime, reset);
     DEBUG(ok);
     DEBUG('\n');

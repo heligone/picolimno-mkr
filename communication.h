@@ -75,7 +75,7 @@ class Communication {
       if (connectGSMGPRS(GSM_CONNECTION)) {
         return modem.getIMEI();
       } else {
-        DEBUG(F("Error connecting GSM in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG('\n');
+        DEBUG(F("Error connecting GSM or GPRS in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG('\n');
         return "";
       }
     }
@@ -141,7 +141,7 @@ class Communication {
 
       const String body = http.responseBody();
       DEBUG(F("Body: ")); DEBUG(body); DEBUG('\n');
-      client.stop();
+//      client.stop();
 
       DynamicJsonBuffer jsonBuffer(JSON_OBJECT_SIZE(6) + 60);
       const JsonObject& root = jsonBuffer.parseObject(body);
@@ -254,7 +254,7 @@ class Communication {
       const String body = http.responseBody();
       DEBUG(F("Body: ")); DEBUG(body); DEBUG('\n');
 
-      client.stop();
+//      client.stop();
       return true;
     }
 
@@ -324,7 +324,7 @@ class Communication {
       const String body = http.responseBody();
       DEBUG(F("Body: ")); DEBUG(body); DEBUG('\n');
 
-      client.stop();
+//      client.stop();
       return true;
     }
 
@@ -438,6 +438,9 @@ class Communication {
       return 0;
     }
     DEBUG("GPRS OK"); DEBUG(F("\n"));
+
+    DEBUG(F("connected with Operator ")); DEBUG(modem.getOperator());
+    DEBUG(F(",Signal ")); DEBUG(modem.getSignalQuality()); DEBUG('\n');
 
     /*
           switch (aState) {
