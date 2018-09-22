@@ -37,11 +37,11 @@
 #include "alert.h"
 #include "communication.h"
 
-/// Temps en minutes entre deux mesures de distance.
-#define INTERVAL_MESURES (1)
+/// Temps en secondes entre deux mesures de distance.
+#define INTERVAL_MESURES (5*60)
 
 /// Temps en seconde entre deux transmissions.
-#define INTERVAL_TRANSMISSION (2*60)
+#define INTERVAL_TRANSMISSION (15 *60)
 
 /// Nombre d'échantillons matériels nécessaires pour faire un échantillon brut après médiane (minimum sinon l'échantillon est invalide).
 #define RANGE_SEQ_MIN 20
