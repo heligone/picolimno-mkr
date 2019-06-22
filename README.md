@@ -32,13 +32,13 @@ Après avoir cloner le répertoire, penser à ajouter le fichier
 ```
 
 ### Dépendances
-* QueueArray : 
-  <code>Croquis > Inclure une biliothèque >  Ajouter la bibliothèque .ZIP...</code> Importer préalablement le fichier disponible sur https://playground.arduino.cc/Code/QueueArray  ;
-* MKRGSM :
-  <code>Croquis > Inclure une biliothèque > MKRGSM</code> ;
+* wiring_private
+pour ajouter un port série suyr le mkrzero
 * RTCZero :
   <code>Croquis > Inclure une biliothèque > RTCZero</code>
 * ArduinoJson (https://github.com/bblanchon/ArduinoJson) :
   <code>Croquis > Inclure une biliothèque > Gérer les biliothèques</code> ; Ajouter "ArduinoJSON" dans le filtre et cliquer sur Installer.
-
+* TinyGsmClient : bibliothèque de comande du modem
+* ArduinoHttpClient : couche http
+* StreamDebugger : pour debug avancé
 
