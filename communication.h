@@ -24,16 +24,19 @@
 
 #pragma once
 
-#define TINY_GSM_MODEM_UBLOX
+//#define TINY_GSM_MODEM_UBLOX
+#define TINY_GSM_MODEM_SIM800
 // #define TINY_GSM_RX_BUFFER 512
 // #define TINY_GSM_TX_BUFFER 512
 #include <TinyGsmClient.h>
 #include <ArduinoHttpClient.h>
 
-#define LOG 1
+#define GSM_RESETN 4
+
+//#define LOG 1
 #ifdef LOG
   #include <StreamDebugger.h>
-  StreamDebugger debugger(SerialGSM, Serial);
+  StreamDebugger debugger(Serial1, mySerial);
 #endif
 
 
@@ -92,7 +95,11 @@ class Communication {
         DEBUG(F("No success connecting GPRS and getting parameters in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F("!\n"));
         return false;
       }
-
+      
+      // for timing out while loops
+      const unsigned long timeout = 60000; //the timeout in milliseconds
+      unsigned long loopStartingTime;
+      
       TinyGsmClient client(modem);
       
       const String server = serverName;
@@ -124,7 +131,8 @@ class Communication {
       }
       if (status <= 0) return false;
 
-      while (!http.endOfHeadersReached()) {
+      loopStartingTime = millis();
+      while (!http.endOfHeadersReached() && ((millis() - loopStartingTime) < timeout)) {
         if (http.headerAvailable()) {
           const String name = http.readHeaderName();
           const String value = http.readHeaderValue();
@@ -197,6 +205,10 @@ class Communication {
         return false;
       }
 
+      // for timing out while loops
+      const unsigned long timeout = 60000; //the timeout in milliseconds
+      unsigned long loopStartingTime;
+
       TinyGsmClient client(modem);
       
       const String server = serverName;
@@ -244,7 +256,8 @@ class Communication {
       }
       if (status <= 0) return false;
 
-      while (!http.endOfHeadersReached()) {
+     loopStartingTime = millis();
+      while (!http.endOfHeadersReached() && ((millis() - loopStartingTime) < timeout)) {
         if (http.headerAvailable()) {
           const String name = http.readHeaderName();
           const String value = http.readHeaderValue();
@@ -272,6 +285,11 @@ class Communication {
         DEBUG(F("No success connecting GPRS and sending status in ")); DEBUG(F(__PRETTY_FUNCTION__)); DEBUG(F("!\n"));
         return false;
       }
+
+      // for timing out while loops
+      const unsigned long timeout = 60000; //the timeout in milliseconds
+      unsigned long loopStartingTime;
+      
 
       TinyGsmClient client(modem);
       
@@ -314,7 +332,9 @@ class Communication {
       }
       if (status <= 0) return false;
 
-      while (!http.endOfHeadersReached()) {
+
+      loopStartingTime = millis();
+      while (!http.endOfHeadersReached() && ((millis() - loopStartingTime) < timeout)) {
         if (http.headerAvailable()) {
           const String name = http.readHeaderName();
           const String value = http.readHeaderValue();
@@ -333,12 +353,12 @@ class Communication {
     */
     void setup() {
       // set serial baudrate
-      SerialGSM.begin(115200);
+      Serial1.begin(115200);
       // hard resert
       pinMode(GSM_RESETN, OUTPUT);
-      digitalWrite(GSM_RESETN, HIGH);
-      delay(100);
       digitalWrite(GSM_RESETN, LOW);
+      delay(100);
+      digitalWrite(GSM_RESETN, HIGH);
       delay(3000);
 
       if (!modem.restart()) {
@@ -355,7 +375,6 @@ class Communication {
 
       const int battLevel = modem.getBattPercent();
       DEBUG("- Battery level: "); DEBUG(battLevel); DEBUG('\n');
-
     }
 
   protected:
@@ -381,7 +400,7 @@ class Communication {
 #ifdef LOG
       modem(debugger),
 #else
-      modem(SerialGSM),
+      modem(Serial1),
 #endif
       apnName(aApn),
       apnLogin(aLogin),
@@ -397,52 +416,28 @@ class Communication {
        @param retry Nombre de réessais pour obtenir l'état demandé, 10 par défaut.
        @return L'état de la connexion, true si ok, false en cas d'erreur.
     */
-    bool connectGSMGPRS(const state_t aState, const byte aRetry = 10) const {
+    bool connectGSMGPRS(const state_t aState, const byte aRetry = 5) const {
       DEBUG(F("Connect")); 
       //DEBUG(aState);
       DEBUG(F("..."));
 
-    // Restart takes quite some time
-    // To skip it, call init() instead of restart()
-    // FOR THE MKR GSM 1400
-    // https://github.com/vshymanskyy/TinyGSM/pull/161/commits/57170c7565846df19bc87e729ee07aa7477e0597
-    // reset / powerup the modem
-    pinMode(GSM_RESETN, OUTPUT);
-    digitalWrite(GSM_RESETN, HIGH);
-    delay(100);
-    digitalWrite(GSM_RESETN, LOW);
-  
-    // Restart takes quite some time
-    // To skip it, call init() instead of restart()
-    DEBUG(F("Initializing modem...")); 
-    modem.restart();
-    String modemInfo = modem.getModemInfo();
-    DEBUG(F("Modem: "));
-    DEBUG(modemInfo); DEBUG(F("\n"));
-    // Unlock your SIM card with a PIN
-    //modem.simUnlock("1234");
-  
-    DEBUG(F("Waiting for GSM network..."));
-    if (!modem.waitForNetwork()) {
-      DEBUG(" GSM fail"); DEBUG(F("\n"));
-      delay(10000);
-      return 0;
-    }
-    DEBUG("GSM OK"); DEBUG(F("\n"));
-  
-    DEBUG(F("Connecting to "));
-    DEBUG(APN_NAME); DEBUG(F("..."));
-    if (!modem.gprsConnect(APN_NAME, APN_USERNAME, APN_PASSWORD)) {
-      DEBUG(F("GPRS fail ! ")); DEBUG(F("\n"));
-      delay(10000);
-      return 0;
-    }
-    DEBUG("GPRS OK"); DEBUG(F("\n"));
+      // test if modem replies to AT command. Else, hard Reset via pulse sent to GSM_RESETN
+      // Note : testAT is a tinyGSM function, with a 10000 ms timeout
+      // check tinyGsmClientSIM800.h
+      if(!modem.testAT()) {
+        // hard reset
+        // pinMode(GSM_RESETN, OUTPUT);
+        digitalWrite(GSM_RESETN, LOW);
+        delay(100);
+        digitalWrite(GSM_RESETN, HIGH);
+        delay(3000);
+        DEBUG(F("MODEM HARD RESET after modem does not reply to AT comand...\n"));
+        if (!modem.restart()) {
+          DEBUG(F("Error restarting modem!\n"));
+        }
+      }
 
-    DEBUG(F("connected with Operator ")); DEBUG(modem.getOperator());
-    DEBUG(F(",Signal ")); DEBUG(modem.getSignalQuality()); DEBUG('\n');
-
-    /*
+    
           switch (aState) {
             case IDLE :
               for (int i = 0; i < aRetry; ++i) {
@@ -523,8 +518,104 @@ class Communication {
               }
               break;
           }
+
+        // If connection not working at first try, redo it after  modem hard reset.
+        // hard reset
+        // pinMode(GSM_RESETN, OUTPUT);
+        digitalWrite(GSM_RESETN, LOW);
+        delay(100);
+        digitalWrite(GSM_RESETN, HIGH);
+        delay(3000);
+        DEBUG(F("MODEM HARD RESET After connectGSMGPRS() failed \n"));
+        if (!modem.restart()) {
+          DEBUG(F("Error restarting modem!\n"));
+        }
+
+          switch (aState) {
+            case IDLE :
+              for (int i = 0; i < aRetry; ++i) {
+                DEBUG(i + 1); DEBUG('/'); DEBUG(aRetry); DEBUG(',');
+                if (modem.isGprsConnected()) {
+                  if (!modem.gprsDisconnect()) {
+                    DEBUG(F("Can not disconnect from GPRS to go to IDLE!\n"));
+                    continue;
+                  }
+                }
+                return true;
+              }
+              break;
+            case GSM_CONNECTION_ONLY :
+            case GSM_CONNECTION :
+              for (int i = 0; i < aRetry; ++i) {
+                DEBUG(i+1); DEBUG('/'); DEBUG(aRetry); DEBUG(',');
+                if (modem.isNetworkConnected()) {
+                  if (aState == GSM_CONNECTION_ONLY) {
+                    if (modem.isGprsConnected() && modem.gprsDisconnect()) return true;
+                  } else {
+                    return true;
+                  }
+                } else {  // not yet connected
+                  if (!modem.waitForNetwork()) {
+                    DEBUG(F("Error in waitForNetwork()\n"));
+                    delay(500);
+                    continue;
+                  }
+                  if (!modem.isNetworkConnected()) {
+                    DEBUG(F("Error in waitForNetwork()\n"));
+                    delay(500);
+                    continue;
+                  }
+                }
+    
+                DEBUG(F("connected with Operator ")); DEBUG(modem.getOperator());
+                DEBUG(F(",Signal ")); DEBUG(modem.getSignalQuality()); DEBUG('\n');
+    
+                return true;
+              }
+              break;
+            case GPRS_CONNECTION :
+              for (int i = 0; i < aRetry; ++i) {
+                DEBUG(i + 1); DEBUG('/'); DEBUG(aRetry); DEBUG(',');
+                if (modem.isGprsConnected()) return true;
+    
+                if (!modem.isNetworkConnected()) {
+                  if (!modem.waitForNetwork()) {
+                    DEBUG(F("Error in waitForNetwork()!\n"));
+                    delay(500);
+                    continue;
+                  }
+                  if (!modem.isNetworkConnected()) {
+                    DEBUG(F("Still not Network Connected!\n"));
+                    delay(500);
+                    continue;
+                  }
+                }   // connected now
+    
+                const String name(apnName);
+                const String login(apnLogin);
+                const String password(apnPassword);
+    
+                if (!modem.gprsConnect(name.c_str(), password.c_str())) {
+                  DEBUG(F("Error in gprsConnect("));
+                  DEBUG(name); DEBUG(','); DEBUG(login); DEBUG(','); DEBUG(password); DEBUG(F(")\n"));
+                  delay(500);
+                  continue;
+                }
+                if (!modem.isGprsConnected()) {
+                  DEBUG(F("Still not GPRS connected!\n"));
+                  delay(500);
+                  continue;
+                } // GPRS connected now
+    
+                return true;
+              }
+              break;
+          }
+
+
+          // if nothing worked after aRetry + aRetry after hard reset : throw error !      
           return false;
-          */
+          
     }
 
     /*

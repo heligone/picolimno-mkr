@@ -21,11 +21,12 @@
     @author M. SIBERT
     @version 1.0 25/02/2018
 */
+  Uart mySerial (&sercom3, 0, 1, SERCOM_RX_PAD_1, UART_TX_PAD_0); // Create the new UART instance assigning 
 
 #define DEBUG_BUILD 1
 
 #ifdef DEBUG_BUILD
-#  define DEBUG(x) do { Serial.print(x); Serial1.print(x);  } while(0)
+#  define DEBUG(x) do { Serial.print(x);mySerial.print(x); } while(0)
 #else
 #  define DEBUG(x) do {} while (0)
 #endif
@@ -41,10 +42,22 @@
 
 #include "App.h"
 
+// for adding serial port ?
+#include "wiring_private.h"
+
 App& app = App::getInstance(F(APN_NAME), F(APN_USERNAME), F(APN_PASSWORD));
 
 void setup() {
-  Serial.begin(115200);
+
+
+
+  pinPeripheral(0, PIO_SERCOM); //Assign RX function to pin 0
+  pinPeripheral(1, PIO_SERCOM); //Assign TX function to pin 1
+  // BT Serial
+  mySerial.begin(57600);
+  // USB Serial
+  Serial.begin(57600);
+  // GSM Serial
   Serial1.begin(57600);
 //  while (!Serial) ;
   delay(5000);
@@ -65,5 +78,10 @@ void loop() {
     DEBUG(F("Error in App::Loop!")); DEBUG(F("\n"));
     exit(0);
   }
+}
+
+  void SERCOM3_Handler()
+{
+  mySerial.IrqHandler();
 }
  

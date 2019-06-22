@@ -51,7 +51,7 @@
 // Indique la méthode de transmission :
 // Si PETITES_TRAMES est defini : chaque variable est transmise séparément ;
 // Sinon : toutes les variables sont transmises dans une unique requête (array JSON).
-// #define PETITES_TRAMES
+#define PETITES_TRAMES
 
 /**
  * Classe principale qui implémente l'application.
@@ -358,7 +358,7 @@ private:
     TRIGGER = 2,
     ECHO = 3,
     LED = 6,
-    AM2302 = 0
+    AM2302 = 5
   };
 
 // Parameters
