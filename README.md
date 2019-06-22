@@ -1,8 +1,8 @@
 # picolimno-mkr
 
-Télémètre à ultra-sons basé sur le carte Arduino MKRGSM-1400.
+Télémètre à ultra-sons basé sur le carte Arduino MKRZERO et modem ADAFRUIT  FONA - Mini Cellular GSM Breakout uFL Version (1946)
 
-![Image of breadboard](doc/proto.jpg)
+![Image of breadboard](doc/electroniquepico2019.jpg)
 
 ## Compilation
 Après avoir cloner le répertoire, penser à ajouter le fichier
