@@ -3,7 +3,10 @@
 Télémètre à ultra-sons basé sur le carte Arduino MKRZERO et modem ADAFRUIT  FONA808mini - Mini Cellular GSM Breakout uFL Version (1946)
 
 ![plan](doc/electroniquepico2019..jpg)
-![plan](doc/electroniquepico2019.jpg)
+![breadboard](doc/BB1.jpg)
+![breadboard](doc/BB2.jpg)
+![breadboard](doc/BB3.jpg)
+
 
 ## Compilation
 Après avoir cloner le répertoire, penser à ajouter le fichier
