@@ -7,6 +7,10 @@ Télémètre à ultra-sons basé sur le carte Arduino MKRZERO et modem ADAFRUIT 
 ![breadboard](doc/BB2.jpg)
 ![breadboard](doc/BB3.jpg)
 
+## electronique
+astuce pour permettre reset du modem en cas de pb : bridger une diode une résistance pour permettre un hard reset depuis le MKR
+
+see p 49 https://cdn-learn.adafruit.com/downloads/pdf/adafruit-fona-mini-gsm-gprs-cellular-phone-module.pdf
 
 ## Compilation
 Après avoir cloner le répertoire, penser à ajouter le fichier
